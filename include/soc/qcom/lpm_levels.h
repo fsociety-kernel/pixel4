@@ -27,4 +27,5 @@ static inline uint32_t register_system_pm_ops(struct system_pm_ops *pm_ops)
 { return -ENODEV; }
 #endif
 
+void lpm_cluster_use_deepest_state(bool enable);
 #endif
