@@ -1829,6 +1829,7 @@ struct hdd_context {
 	/** P2P Device MAC Address for the adapter  */
 	struct qdf_mac_addr p2p_device_address;
 
+	qdf_wake_lock_t rx_wake_lock;
 	qdf_wake_lock_t sap_wake_lock;
 
 	void *hdd_ipa;
@@ -1860,7 +1861,6 @@ struct hdd_context {
 	/* defining the firmware version */
 	uint32_t target_fw_version;
 	uint32_t target_fw_vers_ext;
-	struct hdd_fw_ver_info fw_version_info;
 
 	/* defining the chip/rom version */
 	uint32_t target_hw_version;
@@ -2056,6 +2056,7 @@ struct hdd_context {
 	unsigned long derived_intf_addr_mask;
 	struct wlan_mlme_chain_cfg fw_chain_cfg;
 	struct sar_limit_cmd_params *sar_cmd_params;
+	struct hdd_fw_ver_info fw_version_info;
 };
 
 /**
