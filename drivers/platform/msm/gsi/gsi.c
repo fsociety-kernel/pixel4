@@ -3503,7 +3503,6 @@ ring_doorbell:
 
 	return GSI_STATUS_SUCCESS;
 }
-EXPORT_SYMBOL(gsi_queue_xfer);
 
 int gsi_start_xfer(unsigned long chan_hdl)
 {
