@@ -386,6 +386,9 @@ static void msm_restart_prepare(const char *cmd)
 	else
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
 
+	/* keep console-ramoops alive */
+	need_warm_reset = true;
+
 	if (in_panic) {
 		qpnp_pon_set_restart_reason(PON_RESTART_REASON_PANIC);
 	} else if (cmd != NULL) {
