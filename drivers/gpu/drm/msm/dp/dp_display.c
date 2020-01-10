@@ -2487,7 +2487,7 @@ static int dp_display_mst_connector_update_link_info(
 	memcpy(&dp_panel->link_info, &dp->panel->link_info,
 			sizeof(dp_panel->link_info));
 
-	DP_MST_DEBUG("dp mst connector:%d link info updated\n");
+	DP_MST_DEBUG("dp mst connector: link info updated\n");
 
 	return rc;
 }

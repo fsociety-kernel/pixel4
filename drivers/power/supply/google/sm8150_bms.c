@@ -709,7 +709,7 @@ static int sm8150_get_chg_chgr_state(const struct bms_dev *bms,
 			  union gbms_charger_state *chg_state)
 {
 	int vchrg, rc;
-	bool usb_valid, dc_valid;
+	bool usb_valid = false, dc_valid = false;
 	u8 icl = 0;
 
 	chg_state->v = 0;

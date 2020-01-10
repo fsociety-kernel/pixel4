@@ -294,7 +294,7 @@ static int crus_afe_send_config(const char *data, size_t length,
 	int sent = 0;
 	int chars_to_send = 0;
 
-	pr_info("send config with module_id = %x, string length = %d\n",
+	pr_info("send config with module_id = %x, string length = %ld\n",
 		module, length);
 
 	if (!msm_crus_is_cirrus_afe_topology()) {
@@ -371,7 +371,7 @@ static int crus_afe_send_delta(const char *data, size_t length)
 	int sent = 0;
 	int chars_to_send = 0;
 
-	pr_info("called with module_id = %x, string length = %d\n",
+	pr_info("called with module_id = %x, string length = %ld\n",
 		module, length);
 
 	if (!msm_crus_is_cirrus_afe_topology()) {

@@ -821,7 +821,7 @@ static void p9221_align_work(struct work_struct *work)
 	int res, align_buckets, i;
 	u16 mfg, status_reg = 0;
 	u16 current_now, current_filter_sample;
-	u32 wlc_freq, current_scaling;
+	u32 wlc_freq, current_scaling = 0;
 	struct p9221_charger_data *charger = container_of(work,
 			struct p9221_charger_data, align_work.work);
 
