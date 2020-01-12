@@ -38,6 +38,7 @@
 
 #ifdef CONFIG_UCI_NOTIFICATIONS
 #include <linux/notification/notification.h>
+#include <linux/inputfilter/inputfilter.h>
 #include <linux/uci/uci.h>
 #include <linux/alarmtimer.h>
 #endif
@@ -353,6 +354,9 @@ err_mutex:
 
 	return ret;
 }
+#ifdef CONFIG_UCI_NOTIFICATIONS
+//#define VIB_DEBUG
+#endif
 
 static ssize_t cs40l2x_cp_trigger_queue_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
@@ -439,7 +443,7 @@ static ssize_t cs40l2x_cp_trigger_queue_store(struct device *dev,
 
 	pbq_str_tok = strsep(&pbq_str, ",");
 #ifdef CONFIG_UCI_NOTIFICATIONS
-#if 0
+#ifdef VIB_DEBUG
 	pr_info("%s [booster] val %s\n",__func__,pbq_str);
 #endif
 #endif
@@ -483,7 +487,7 @@ static ssize_t cs40l2x_cp_trigger_queue_store(struct device *dev,
 			}
 			cs40l2x->pbq_pairs[pbq_depth++].mag = val;
 #ifdef CONFIG_UCI_NOTIFICATIONS
-#if 0
+#ifdef VIB_DEBUG
 			pr_info("%s [booster] waveform %d\n",__func__,val);
 #endif
 #endif
@@ -553,7 +557,7 @@ static ssize_t cs40l2x_cp_trigger_queue_store(struct device *dev,
 				goto err_mutex;
 			}
 #ifdef CONFIG_UCI_NOTIFICATIONS
-#if 0
+#ifdef VIB_DEBUG
 			pr_info("%s [booster] repetition %d\n",__func__,val);
 #endif
 #endif
@@ -582,7 +586,7 @@ static ssize_t cs40l2x_cp_trigger_queue_store(struct device *dev,
 			}
 			cs40l2x->pbq_pairs[pbq_depth++].mag = val;
 #ifdef CONFIG_UCI_NOTIFICATIONS
-#if 0
+#ifdef VIB_DEBUG
 			pr_info("%s [booster] duration %d\n",__func__,val);
 #endif
 #endif
@@ -2294,7 +2298,7 @@ static ssize_t cs40l2x_dig_scale_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 #ifdef CONFIG_UCI_NOTIFICATIONS
-#if 0
+#ifdef VIB_DEBUG
 	pr_info("%s [booster] val %d\n",__func__,dig_scale);
 #endif
 	if (should_boost()) {
@@ -2957,6 +2961,12 @@ err_mutex:
 	return ret;
 }
 
+#ifdef CONFIG_UCI_NOTIFICATIONS
+#define SQUEEZE_START_SCALE_VAL 23
+#define SQUEEZE_END_SCALE_VAL 37
+static unsigned int last_cp_dig_scale = 0;
+#endif
+
 static ssize_t cs40l2x_cp_dig_scale_store(struct device *dev,
 			struct device_attribute *attr,
 			const char *buf, size_t count)
@@ -2974,9 +2984,18 @@ static ssize_t cs40l2x_cp_dig_scale_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 #ifdef CONFIG_UCI_NOTIFICATIONS
-#if 0
+#ifdef VIB_DEBUG
 	pr_info("%s [booster] val %d\n",__func__,dig_scale);
 #endif
+	// squeeze helping reports based on scale value set...
+	if (dig_scale == SQUEEZE_START_SCALE_VAL) {
+		if_report_squeeze_event(jiffies,true,IF_EVENT_SQUEEZE_VIB_START);
+	} else
+	if (dig_scale == SQUEEZE_END_SCALE_VAL && last_cp_dig_scale == SQUEEZE_START_SCALE_VAL) {
+		if_report_squeeze_event(jiffies,true,IF_EVENT_SQUEEZE_VIB_END);
+	}
+	last_cp_dig_scale = dig_scale;
+
 	// if in pocket and should boost, dig scale should always be set to 0, even when framework is playing with fluctuating scale level at calls
 	if (should_boost()) {
 		dig_scale = 100 - uci_get_notification_booster_overdrive_perc();
@@ -5255,7 +5274,11 @@ static void cs40l2x_vibe_brightness_set(struct led_classdev *led_cdev,
 {
 	struct cs40l2x_private *cs40l2x =
 		container_of(led_cdev, struct cs40l2x_private, led_dev);
-
+#ifdef CONFIG_UCI_NOTIFICATIONS
+#ifdef VIB_DEBUG
+	pr_info("%s [booster] val %d\n",__func__, brightness);
+#endif
+#endif
 	switch (brightness) {
 	case LED_OFF:
 		queue_work(cs40l2x->vibe_workqueue, &cs40l2x->vibe_stop_work);
