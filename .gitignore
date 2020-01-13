@@ -129,5 +129,6 @@ kernel/configs/android-*.cfg
 # Qualcomm out-of-tree audio drivers
 /techpack/audio
 
-#build script
+#building
 build.sh
+/out
