@@ -7,13 +7,13 @@
 #
 
 # Path to executables in Clang toolchain
-clang_bin="$HOME/android/linux-x86/clang-r370808/bin"
+clang_bin="$HOME/linux-x86/clang-r370808/bin"
 
 # 64-bit GCC toolchain prefix
-gcc_prefix64="$HOME/android/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
+gcc_prefix64="$HOME/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
 
 # 32-bit GCC toolchain prefix
-gcc_prefix32="$HOME/android/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
+gcc_prefix32="$HOME/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
 
 # Number of parallel jobs to run
 # Do not remove; set to 1 for no parallelism.
