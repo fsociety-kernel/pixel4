@@ -132,5 +132,6 @@ kernel/configs/android-*.cfg
 #
 Android.bp
 
-#build script
+#building
 build.sh
+/out
