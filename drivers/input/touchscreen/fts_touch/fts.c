@@ -81,6 +81,10 @@
 #define CONFIG_SKIP_HEATMAP
 #endif
 
+#ifdef CONFIG_UCI
+#include <linux/inputfilter/sweep2sleep.h>
+#endif
+
 /* Touch simulation MT slot */
 #define TOUCHSIM_SLOT_ID		0
 #define TOUCHSIM_TIMER_INTERVAL_NS	8333333
@@ -1493,6 +1497,11 @@ static void touchsim_refresh_coordinates(struct fts_touchsim *touchsim)
 static void touchsim_report_contact_event(struct input_dev *dev, int slot_id,
 						int x, int y, int z)
 {
+#ifdef CONFIG_UCI
+	int x2, y2;
+	bool frozen_coords = s2s_freeze_coords(&x2,&y2,x,y);
+	if (frozen_coords) { x = x2; y = y2; }
+#endif
 	/* report the cordinates to the input subsystem */
 	input_mt_slot(dev, slot_id);
 	input_report_key(dev, BTN_TOUCH, true);
@@ -2936,9 +2945,18 @@ static bool fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
 
 	/* pr_debug("%s : TouchID = %d,Touchcount = %d\n", __func__,
 	  *	touchId,touchcount); */
+#ifdef CONFIG_UCI
+	{
+		int x2, y2;
+		bool frozen_coords = s2s_freeze_coords(&x2,&y2,x,y);
+		if (frozen_coords) { x = x2; y = y2; }
+#endif
 
 	input_report_abs(info->input_dev, ABS_MT_POSITION_X, x);
 	input_report_abs(info->input_dev, ABS_MT_POSITION_Y, y);
+#ifdef CONFIG_UCI
+	}
+#endif
 	input_report_abs(info->input_dev, ABS_MT_TOUCH_MAJOR, major);
 	input_report_abs(info->input_dev, ABS_MT_TOUCH_MINOR, minor);
 #ifndef SKIP_PRESSURE
