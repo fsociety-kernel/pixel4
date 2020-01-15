@@ -740,7 +740,7 @@ CONFIG_XZ_DEC=y
 #
 # fsociety special additions
 #
-CONFIG_LOCALVERSION="-fsociety.alpha#5"
+CONFIG_LOCALVERSION="-fsociety.alpha#6"
 # CONFIG_LOCALVERSION_AUTO is not set
 CONFIG_QCA_CLD_WLAN=y
 CONFIG_QCACLD_WLAN_LFR3=y
