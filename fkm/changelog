@@ -1,10 +1,4 @@
-fsociety #1.01
-01/28/2020
-- upstreamed to 4.14.168
-- Revert "sched/fair.c: Don't allow SchedTune boosted tasks to be migrated to small cores"
-- Enable CONFIG_WQ_POWER_EFFICIENT_DEFAULT
-- cnss2: fix memory leaks 
-- msm: cvp: convert infinite wait to timeout wait 
-- power: qos: Fix accessing pm_qos_request struct 
-- msm: camera: disable debug logging
+fsociety #1.02
+01/29/2020
+- fix gpu being stuck @ max freq
 
