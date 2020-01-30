@@ -1,4 +1,3 @@
-fsociety #1.02
+fsociety #1.03
 01/29/2020
-- fix gpu being stuck @ max freq
-
+- Upstreamed to 4.14.169
