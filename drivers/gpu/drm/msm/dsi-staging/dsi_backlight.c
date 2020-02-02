@@ -27,12 +27,15 @@
 #include "dsi_display.h"
 #include "dsi_panel.h"
 
-#ifdef CONFIG_KLAPSE
-#include <linux/klapse.h>
+#ifdef CONFIG_UCI
+#include <linux/uci/uci.h>
 #endif
-
 #ifdef CONFIG_UCI_NOTIFICATIONS_SCREEN_CALLBACKS
 #include <linux/notification/notification.h>
+#endif
+
+#ifdef CONFIG_KLAPSE
+#include <linux/klapse.h>
 #endif
 
 #define BL_NODE_NAME_SIZE 32
@@ -92,6 +95,73 @@ static ssize_t hbm_store(struct device *device, struct device_attribute *attr,
 }
 
 static DEVICE_ATTR_RW(hbm);
+#ifdef CONFIG_UCI
+static bool last_hbm_mode = false;
+
+static int uci_switch_hbm(int on) {
+	struct dsi_panel *panel = NULL;
+	bool hbm_mode = !!on;
+
+	if (!bl_g->hbm)
+		return -ENOTSUPP;
+
+	panel = container_of(bl_g, struct dsi_panel, bl_config);
+	dsi_panel_update_hbm(panel, hbm_mode);
+
+	pr_info("%s %d\n",__func__,on);
+	last_hbm_mode = hbm_mode;
+	return 0;
+}
+
+static int uci_lux_level = -1;
+static bool uci_hbm_switch = false;
+static bool uci_hbm_use_ambient_light = false;
+
+static void uci_sys_listener(void) {
+	int new_lux_level = uci_get_sys_property_int_mm("lux_level", 0, 0, 27000);
+	pr_info("%s hbm\n",__func__);
+	if (!uci_hbm_switch) {  // hbm switch is off..
+		if (last_hbm_mode) { // and it's set to hbm already in driver.. switch it off
+			uci_switch_hbm(0);
+		}
+	} else { // hbm switch is on...
+		if (new_lux_level==0 && uci_hbm_use_ambient_light) {
+			if (last_hbm_mode) {
+				uci_switch_hbm(0);
+			}
+		} else { // new lux level is high...let's switch it on
+			if (!last_hbm_mode || uci_lux_level == -1) { //... if it's not yet on...or fresh screen off/on cycle...
+				uci_switch_hbm(1);
+			}
+		}
+	}
+	uci_lux_level = new_lux_level;
+}
+static void uci_user_listener(void) {
+	bool new_hbm_switch = !!uci_get_user_property_int_mm("hbm_switch", 0, 0, 1);
+	bool new_hbm_use_ambient_light = !!uci_get_user_property_int_mm("hbm_use_ambient_light", 0, 0, 1);
+	pr_info("%s hbm\n",__func__);
+	if (new_hbm_switch!=uci_hbm_switch || new_hbm_use_ambient_light!=uci_hbm_use_ambient_light) {
+		uci_hbm_switch = new_hbm_switch;
+		uci_hbm_use_ambient_light = new_hbm_use_ambient_light;
+		uci_lux_level = -1;
+		uci_sys_listener();
+	}
+}
+static void ntf_listener(char* event, int num_param, char* str_param) {
+        if (strcmp(event,NTF_EVENT_CHARGE_LEVEL) && strcmp(event, NTF_EVENT_INPUT)) {
+                pr_info("%s dsi_backlight ntf listener event %s %d %s\n",__func__,event,num_param,str_param);
+        }
+
+        if (!strcmp(event,NTF_EVENT_SLEEP)) {
+		uci_lux_level = -1;
+        }
+        if (!strcmp(event,NTF_EVENT_WAKE_BY_USER) || !strcmp(event,NTF_EVENT_WAKE_BY_FRAMEWORK)) {
+		// screen just on...set lux level -1, so HBM will be set again if needed...
+		uci_lux_level = -1;
+	}
+}
+#endif
 
 static void fb0_init_device(struct dsi_backlight_config *bl)
 {
@@ -104,6 +174,11 @@ static void fb0_init_device(struct dsi_backlight_config *bl)
 
 	if (device_create_file(fb0_device, &dev_attr_hbm))
 		pr_warn("unable to create hbm node\n");
+#ifdef CONFIG_UCI
+        uci_add_sys_listener(uci_sys_listener);
+        uci_add_user_listener(uci_user_listener);
+        ntf_add_listener(ntf_listener);
+#endif
 }
 
 struct dsi_backlight_pwm_config {
@@ -675,6 +750,9 @@ static ssize_t hbm_mode_store(struct device *dev,
 	}
 	pr_debug("hbm_mode set to %d\n", panel->hbm_mode);
 
+#ifdef CONFIG_UCI
+	last_hbm_mode = hbm_mode;
+#endif
 	return count;
 }
 
@@ -695,6 +773,9 @@ static ssize_t hbm_mode_show(struct device *dev,
 
 	panel = container_of(bl, struct dsi_panel, bl_config);
 	hbm_mode = dsi_panel_get_hbm(panel);
+#ifdef CONFIG_UCI
+	last_hbm_mode = hbm_mode;
+#endif
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", hbm_mode);
 }
