@@ -13,12 +13,12 @@ echo
 mkdir -p out
 export ARCH=arm64
 export SUBARCH=arm64
-export CLANG_PATH=~/linux-x86/clang-r370808/bin
+export CLANG_PATH=~/linux-x86/clang-r370808b/bin
 export PATH=${CLANG_PATH}:${PATH}
 export CLANG_TRIPLE=aarch64-linux-gnu-
 export CROSS_COMPILE=~/aarch64-linux-android-4.9/bin/aarch64-linux-android-
 export CROSS_COMPILE_ARM32=~/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-
-export LD_LIBRARY_PATH=~/linux-x86/clang-r370808/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=~/linux-x86/clang-r370808b/lib:$LD_LIBRARY_PATH
 
 echo
 echo "Set DEFCONFIG"
