@@ -44,58 +44,13 @@
 #define BL_STATE_STANDBY	BL_CORE_FBBLANK
 #define BL_STATE_LP		BL_CORE_DRIVER1
 #define BL_STATE_LP2		BL_CORE_DRIVER2
-#define BL_HBM 			1023
 
 bool backlight_dimmer = 0;
 module_param(backlight_dimmer, bool, 0644);
 
-static int hbm_enable = 0;
-static struct dsi_backlight_config *bl_g;
-static struct device *fb0_device;
-
-static void enable_hbm(int enable)
-{
-	struct dsi_panel *panel = container_of(bl_g, struct dsi_panel, bl_config);
-	struct hbm_data *hbm = bl_g->hbm;
-	struct hbm_range *range = NULL;
-	u32 target_range = enable ? bl_g->hbm->num_ranges - 1 : 0;
-	range = hbm->ranges + target_range;
-
-	if (bl_g->bl_device->props.state & BL_CORE_FBBLANK) {
-		return;
-	}
-
-	if(dsi_panel_cmd_set_transfer(panel, enable ? &range->entry_cmd : &range->dimming_stop_cmd))
-		pr_err("Failed to send command for range %d\n",	enable);
-}
-
-static ssize_t hbm_show(struct device *device, struct device_attribute *attr,
-		      char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%d\n", hbm_enable);
-}
-
-static ssize_t hbm_store(struct device *device, struct device_attribute *attr,
-		       const char *buf, size_t count)
-{
-	int ret, val;
-
-	ret = kstrtoint(buf, 0, &val);
-	if (ret < 0)
-		return ret;
-
-	if (val < 0 || val > 1)
-		val = 0;
-
-	hbm_enable = val;
-	enable_hbm(hbm_enable);
-	backlight_update_status(bl_g->bl_device);
-
-	return count;
-}
-
-static DEVICE_ATTR_RW(hbm);
 #ifdef CONFIG_UCI
+static struct dsi_backlight_config *bl_g;
+
 static bool last_hbm_mode = false;
 
 static int uci_switch_hbm(int on) {
@@ -104,6 +59,10 @@ static int uci_switch_hbm(int on) {
 
 	if (!bl_g->hbm)
 		return -ENOTSUPP;
+
+	if (on && bl_g->bl_device->props.state & BL_CORE_FBBLANK) {
+		return 0;
+	}
 
 	panel = container_of(bl_g, struct dsi_panel, bl_config);
 	dsi_panel_update_hbm(panel, hbm_mode);
@@ -200,24 +159,6 @@ static void ntf_listener(char* event, int num_param, char* str_param) {
 	}
 }
 #endif
-
-static void fb0_init_device(struct dsi_backlight_config *bl)
-{
-	bl_g = bl;
-	fb0_device = device_create(fb_class, NULL, MKDEV(0, 0), NULL, "fb0");
-	if (IS_ERR(fb0_device)) {
-		fb0_device = NULL;
-		return;
-	}
-
-	if (device_create_file(fb0_device, &dev_attr_hbm))
-		pr_warn("unable to create hbm node\n");
-#ifdef CONFIG_UCI
-        uci_add_sys_listener(uci_sys_listener);
-        uci_add_user_listener(uci_user_listener);
-        ntf_add_listener(ntf_listener);
-#endif
-}
 
 struct dsi_backlight_pwm_config {
 	bool pwm_pmi_control;
@@ -586,10 +527,6 @@ static u32 dsi_backlight_calculate(struct dsi_backlight_config *bl,
 	bl_temp = mult_frac(bl_temp, bl->bl_scale_ad,
 			MAX_AD_BL_SCALE_LEVEL);
 
-	if (hbm_enable) {
-		return BL_HBM;
-	}
-
 	if (panel->hbm_mode)
 		bl_lvl = dsi_backlight_calculate_hbm(bl, bl_temp);
 	else
@@ -907,8 +844,12 @@ static int dsi_backlight_register(struct dsi_backlight_config *bl)
 	if (sysfs_create_groups(&bl->bl_device->dev.kobj, bl_device_groups))
 		pr_warn("unable to create device groups\n");
 
-	//make dummy fb0 device so we have the old standard hbm sysfs path
-	fb0_init_device(bl);
+#ifdef CONFIG_UCI
+	bl_g = bl;
+	uci_add_sys_listener(uci_sys_listener);
+	uci_add_user_listener(uci_user_listener);
+	ntf_add_listener(ntf_listener);
+#endif
 
 	reg = regulator_get_optional(panel->parent, "lab");
 	if (!PTR_ERR_OR_ZERO(reg)) {
