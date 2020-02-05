@@ -1,5 +1,4 @@
-fsociety #1.04
-02/03/2020
-- Updated to February security patch
-- Update techpack from February merge
-- Updated AnyKernel3 to osm0sis's latest changes
+fsociety #1.05
+02/05/2020
+- Upstreamed to 4.14.170
+- Updated to clang 10.0.2
