@@ -1023,8 +1023,9 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 
 		/* Find laser status irq for EVT or later build */
 		if (s_ctrl->soc_info.index == IR_MASTER &&
-			s_ctrl->hw_version >= 2)
+			s_ctrl->hw_version >= 2) {
 			cam_find_laser_irq(s_ctrl);
+        }
 
 		CAM_INFO(CAM_SENSOR,
 			"Probe success,slot:%d,slave_addr:0x%x,sensor_id:0x%x",

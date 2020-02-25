@@ -306,8 +306,9 @@ int GyroReCalib(struct camera_io_master *io_master_info,
 
 	rc = F40_GyroReCalib(&pReCalib);
 	memcpy(cal_result, &pReCalib, sizeof(stReCalib));
-	if (rc != 0)
+	if (rc != 0) {
 		return rc;
+    }
 
 	CAM_INFO(CAM_SENSOR,
 		"[OISCali]%d, FctryOffX = %d(0x%x), FctryOffY = %d(0x%x)",
