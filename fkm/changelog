@@ -1,6 +1,4 @@
-fsociety #1.10
-02/15/2020
-- Upstreamed to 4.14.171
-- Added simple_lmk low memory killer from Sultan & tuned it from Artemis
-- Built with clang 10.0.4 - updated from 10.0.2
+fsociety #1.11
+02/26/2020
+- Updated simple_lmk low memory killer from Sultan
 - Merged latest AnyKernel3 changes from osm0sis
