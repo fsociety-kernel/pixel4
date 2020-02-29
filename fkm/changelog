@@ -1,4 +1,5 @@
-fsociety #1.11
-02/26/2020
-- Updated simple_lmk low memory killer from Sultan
-- Merged latest AnyKernel3 changes from osm0sis
+fsociety #1.12
+02/28/2020
+- Upstreamed to 4.14.172
+- FROMLIST: sched/fair: util_est: fast ramp-up EWMA on utilization increases 
+- Revert "proc: Don't let Google Camera run in the background"
