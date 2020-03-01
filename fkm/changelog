@@ -1,5 +1,6 @@
 fsociety #1.12
-02/28/2020
-- Upstreamed to 4.14.172
-- FROMLIST: sched/fair: util_est: fast ramp-up EWMA on utilization increases 
-- Revert "proc: Don't let Google Camera run in the background"
+03/01/2020
+- Updated simple_lmk to Sultan's latest changes
+- Fixed continuous logging from .172 merge by reverting a commit
+- selinux: Avoid dynamic memory allocation for INITCONTEXTLEN buffers (Avoid unncessary call)
+- Fixed a .172 merge conflict more properly
