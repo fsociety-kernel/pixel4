@@ -1312,7 +1312,6 @@ static int do_typec_entry(const char *filename, void *symval, char *alias)
 
 	return 1;
 }
-ADD_TO_DEVTABLE("typec", typec_device_id, do_typec_entry);
 
 /* Does namelen bytes of name exactly match the symbol? */
 static bool sym_is(const char *name, unsigned namelen, const char *symbol)

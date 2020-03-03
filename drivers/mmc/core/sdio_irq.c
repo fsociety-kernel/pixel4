@@ -35,16 +35,8 @@ static int process_sdio_pending_irqs(struct mmc_host *host)
 {
 	struct mmc_card *card = host->card;
 	int i, ret, count;
-	bool sdio_irq_pending = host->sdio_irq_pending;
 	unsigned char pending;
 	struct sdio_func *func;
-
-	/* Don't process SDIO IRQs if the card is suspended. */
-	if (mmc_card_suspended(card))
-		return 0;
-
-	/* Clear the flag to indicate that we have processed the IRQ. */
-	host->sdio_irq_pending = false;
 
 	/*
 	 * Optimization, if there is only 1 function interrupt registered
@@ -52,7 +44,7 @@ static int process_sdio_pending_irqs(struct mmc_host *host)
 	 * Otherwise do the full probe.
 	 */
 	func = card->sdio_single_irq;
-	if (func && sdio_irq_pending) {
+	if (func && host->sdio_irq_pending) {
 		func->irq_handler(func);
 		return 1;
 	}
