@@ -1,6 +1,3 @@
-fsociety #1.12
-03/01/2020
-- Updated simple_lmk to Sultan's latest changes
-- Fixed continuous logging from .172 merge by reverting a commit
-- selinux: Avoid dynamic memory allocation for INITCONTEXTLEN buffers (Avoid unncessary call)
-- Fixed a .172 merge conflict more properly
+fsociety #1.20
+03/03/2020
+- March Security Update 
