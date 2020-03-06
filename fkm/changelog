@@ -1,3 +1,12 @@
-fsociety #1.20
-03/03/2020
-- March Security Update 
+fsociety #1.21
+03/05/2020
+- Add Nintendo Switch controller driver (needs tested)
+- Added Valve Steam controller driver (needs tested)
+- qcacld-3.0 - fix buffer overflow
+- qcacld-3.0 - fixes for race conditions when connecting, disconnecting & in other scenarios
+- qcacld-3.0 - fixes for connect and disconnect logic
+- qcacld-3.0 - move stack allocation to heap
+- cpuidle - cleanup
+- fix treewide clang 11 errors
+- fix clang 11 camera error
+- sched/fair - CPU optimizations & fixes
