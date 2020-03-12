@@ -1,12 +1,8 @@
-fsociety #1.21
-03/05/2020
-- Add Nintendo Switch controller driver (needs tested)
-- Added Valve Steam controller driver (needs tested)
-- qcacld-3.0 - fix buffer overflow
-- qcacld-3.0 - fixes for race conditions when connecting, disconnecting & in other scenarios
-- qcacld-3.0 - fixes for connect and disconnect logic
-- qcacld-3.0 - move stack allocation to heap
-- cpuidle - cleanup
-- fix treewide clang 11 errors
-- fix clang 11 camera error
-- sched/fair - CPU optimizations & fixes
+fsociety #1.22
+03/11/2020
+- Upstreamed to 4.14.173
+- cpufreq: Avoid leaving stale IRQ work items during CPU offline
+- cpufreq: Rename cpufreq_can_do_remote_dvfs()
+- arm64: Use aarch64elf and aarch64elfb emulation mode variants
+- fix ipa Makefile
+- Various compilation cleanups for clang and gcc
