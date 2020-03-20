@@ -1,8 +1,5 @@
-fsociety #1.22
-03/11/2020
-- Upstreamed to 4.14.173
-- cpufreq: Avoid leaving stale IRQ work items during CPU offline
-- cpufreq: Rename cpufreq_can_do_remote_dvfs()
-- arm64: Use aarch64elf and aarch64elfb emulation mode variants
-- fix ipa Makefile
-- Various compilation cleanups for clang and gcc
+fsociety #1.23
+03/20/2020
+- Upstreamed to 4.14.174
+- Built with Clang 10.0.5
+- qcacld-3.0: Fix potentially uninitialized session ID usage
