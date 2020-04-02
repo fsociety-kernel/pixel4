@@ -1,5 +1,7 @@
-fsociety #1.23
-03/20/2020
-- Upstreamed to 4.14.174
-- Built with Clang 10.0.5
-- qcacld-3.0: Fix potentially uninitialized session ID usage
+fsociety #1.24
+04/02/2020
+- Linux 4.14.175
+- Reverted a bad workqueue commit to restore proper file permissions
+- Increase cgroup limit to 7 - stay in line with Google changes
+- simple_lmk updated to latest changes from Sultan
+- AnyKernel3 updated to latest changes from osm0sis
