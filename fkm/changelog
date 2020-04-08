@@ -1,7 +1,4 @@
-fsociety #1.24
-04/02/2020
-- Linux 4.14.175
-- Reverted a bad workqueue commit to restore proper file permissions
-- Increase cgroup limit to 7 - stay in line with Google changes
-- simple_lmk updated to latest changes from Sultan
-- AnyKernel3 updated to latest changes from osm0sis
+fsociety #1.25
+04/07/2020
+- April security patch merged
+- fix 4.14.175 merge derp in drivers/scsi/sd.c
