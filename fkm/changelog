@@ -1,4 +1,4 @@
-fsociety #1.25
-04/07/2020
-- April security patch merged
-- fix 4.14.175 merge derp in drivers/scsi/sd.c
+fsociety #1.26
+04/13/2020
+- Linux 4.14.176
+- Clang updated to 10.0.6
