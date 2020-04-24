@@ -1,4 +1,4 @@
-fsociety #1.26
-04/13/2020
-- Linux 4.14.176
-- Clang updated to 10.0.6
+fsociety #1.27
+04/24/2020
+- Linux 4.14.177
+- Merged osm0sis's latest AnyKernel 3 change
