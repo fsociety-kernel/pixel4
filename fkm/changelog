@@ -1,4 +1,5 @@
-fsociety #1.27
-04/24/2020
-- Linux 4.14.177
-- Merged osm0sis's latest AnyKernel 3 change
+fsociety #1.28
+05/03/2020
+- Linux 4.14.178
+- Clang 11
+- Clang 11 camera errors fixed
