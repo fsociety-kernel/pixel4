@@ -1,13 +1,4 @@
-fsociety #1.32
-05/14/2020
-- msm: camera: isp: schedule tasklet with priority
-- configs: Raise ANDROID_SIMPLE_LMK_MINFREE
-- msm: camera: NULL initialize pointer to structure
-- arch: arm64: Set silver cluster qos-cores for msm_fastrpc
-- sched/fair: Improve the scheduler
-- sched/fair: Fix race between runtime distribution and assignment
-- sched/fair: Align rq->avg_idle and rq->avg_scan_cost
-- sched/rt: Optimize checking group RT scheduler constraints
-- block,cfq: Set cfq_back_penalty to 1
-- block,cfq: Set cfq_quantum to 16
-- Merged latest AnyKernel3 changes from osm0sis
+fsociety #1.33
+05/17/2020
+- Corrected the way dtb is shipped in AnyKernel3 zips
+- Merged latest simple_lmk changes from sultan
