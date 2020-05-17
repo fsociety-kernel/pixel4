@@ -135,3 +135,5 @@ Android.bp
 #building
 build.sh
 /out
+/dtbo
+dtb.sh
