@@ -1,4 +1,4 @@
-fsociety #1.33
-05/17/2020
-- Corrected the way dtb is shipped in AnyKernel3 zips
-- Merged latest simple_lmk changes from sultan
+fsociety #1.34
+05/20/2020
+- Linux 4.14.181
+- Fixed building with WireGuard
