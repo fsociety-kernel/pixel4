@@ -1,14 +1,4 @@
-fsociety #1.35
-05/24/2020
-- cmdline: extend replace for veritymode 'enforcing' SafetyNet
-- cmdline: replace instead of remove for SafetyNet CTS pass 
-- rcu: Speed up calling of RCU tasks callbacks 
-- ARM: dts: sm8150: Force warm reboots 
-- arm64: dtsi: Correctly enable panel-allow-phy-poweroff 
-- arm64: dtsi: Apply some tweaks to the Coral display 
-- sched: energy: handle memory allocation failure 
-- ARM: dts: sm8150: Enable freq-energy-model 
-- sched/energy: Check out to Android 4.14 common kernel 
-- simple_lmk: Hold an RCU read lock instead of the tasklist read lock 
-- mm: Don't stop kswapd on a per-node basis when there are no waiters
-- merged latest AnyKernel3 changes from osm0sis
+fsociety #1.36
+05/27/2020
+- Linux 4.14.182
+- Merged latest AnyKernel3 changes from osm0sis
