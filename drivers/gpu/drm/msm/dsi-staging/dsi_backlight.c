@@ -497,8 +497,6 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 	int bl_lvl;
 	int rc = 0;
 
-	mutex_lock(&panel->panel_lock);
-	mutex_lock(&bl->state_lock);
 	if ((bd->props.state & (BL_CORE_FBBLANK | BL_CORE_SUSPENDED)) ||
 			(bd->props.power != FB_BLANK_UNBLANK))
 		brightness = 0;
@@ -529,7 +527,6 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 	bl->last_state = bd->props.state;
 
 done:
-	mutex_unlock(&bl->state_lock);
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
@@ -1155,7 +1152,6 @@ int dsi_panel_bl_register(struct dsi_panel *panel)
 	const struct of_device_id *match;
 	int (*register_func)(struct dsi_backlight_config *) = NULL;
 
-	mutex_init(&bl->state_lock);
 	match = of_match_node(dsi_backlight_dt_match, panel->panel_of_node);
 	if (match && match->data) {
 		register_func = match->data;
@@ -1192,7 +1188,6 @@ int dsi_panel_bl_unregister(struct dsi_panel *panel)
 {
 	struct dsi_backlight_config *bl = &panel->bl_config;
 
-	mutex_destroy(&bl->state_lock);
 	if (bl->unregister)
 		bl->unregister(bl);
 
