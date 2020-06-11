@@ -895,7 +895,7 @@ static u32 dsi_backlight_calculate(struct dsi_backlight_config *bl,
 	bl_temp = mult_frac(bl_temp, bl->bl_scale_ad,
 			MAX_AD_BL_SCALE_LEVEL);
 
-	if (panel->hbm_mode)
+	if (panel->hbm_mode != HBM_MODE_OFF)
 		bl_lvl = dsi_backlight_calculate_hbm(bl, bl_temp);
 	else
 		bl_lvl = dsi_backlight_calculate_normal(bl, bl_temp);
@@ -951,6 +951,8 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 	int bl_lvl;
 	int rc = 0;
 
+	mutex_lock(&panel->panel_lock);
+	mutex_lock(&bl->state_lock);
 	if ((bd->props.state & (BL_CORE_FBBLANK | BL_CORE_SUSPENDED)) ||
 			(bd->props.power != FB_BLANK_UNBLANK))
 		brightness = 0;
@@ -987,6 +989,7 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 #endif
 
 done:
+	mutex_unlock(&bl->state_lock);
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
@@ -1330,6 +1333,7 @@ int dsi_backlight_early_dpms(struct dsi_backlight_config *bl, int power_mode)
 		ntf_screen_on();
 	}
 #endif
+
 	mutex_lock(&bl->state_lock);
 	state = get_state_after_dpms(bl, power_mode);
 #ifdef CONFIG_UCI_NOTIFICATIONS_SCREEN_CALLBACKS
@@ -1361,7 +1365,7 @@ int dsi_backlight_early_dpms(struct dsi_backlight_config *bl, int power_mode)
 	if (is_lp_mode(state)) {
 		rc = dsi_backlight_update_regulator(bl, state);
 		if (rc)
-			pr_warn("Error updating regulator state: 0x%lx (%d)\n",
+			pr_warn("Error updating regulator state: 0x%x (%d)\n",
 				state, rc);
 	}
 	mutex_unlock(&bl->state_lock);
@@ -1386,7 +1390,7 @@ int dsi_backlight_late_dpms(struct dsi_backlight_config *bl, int power_mode)
 		const int rc = dsi_backlight_update_regulator(bl, state);
 
 		if (rc)
-			pr_warn("Error updating regulator state: 0x%lx (%d)\n",
+			pr_warn("Error updating regulator state: 0x%x (%d)\n",
 				state, rc);
 	}
 
@@ -1654,6 +1658,7 @@ int dsi_panel_bl_register(struct dsi_panel *panel)
 	const struct of_device_id *match;
 	int (*register_func)(struct dsi_backlight_config *) = NULL;
 
+	mutex_init(&bl->state_lock);
 	match = of_match_node(dsi_backlight_dt_match, panel->panel_of_node);
 	if (match && match->data) {
 		register_func = match->data;
@@ -1690,6 +1695,7 @@ int dsi_panel_bl_unregister(struct dsi_panel *panel)
 {
 	struct dsi_backlight_config *bl = &panel->bl_config;
 
+	mutex_destroy(&bl->state_lock);
 	if (bl->unregister)
 		bl->unregister(bl);
 
