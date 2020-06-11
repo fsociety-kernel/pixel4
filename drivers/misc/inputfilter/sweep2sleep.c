@@ -887,14 +887,14 @@ static struct input_handler s2s_input_handler = {
 	.id_table	= s2s_ids,
 };
 
-static ssize_t sweep2sleep_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t sweep2sleep_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n", s2s_switch);
 }
 
-static ssize_t sweep2sleep_dump(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t sweep2sleep_dump(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
 {
 	int ret;
 	unsigned long input;
@@ -910,9 +910,18 @@ static ssize_t sweep2sleep_dump(struct device *dev,
 	
 	return count;
 }
+	
+static struct kobj_attribute sweep2sleep_attribute =
+	__ATTR(sweep2sleep, (S_IWUSR|S_IRUGO), sweep2sleep_show, sweep2sleep_dump);
+	
+static struct attribute *attrs[] = {
+	&sweep2sleep_attribute.attr,
+	NULL,
+};
 
-static DEVICE_ATTR(sweep2sleep, (S_IWUSR|S_IRUGO),
-	sweep2sleep_show, sweep2sleep_dump);
+static struct attribute_group attr_group = {
+	.attrs = attrs,
+};
 
 static struct kobject *sweep2sleep_kobj;
 
@@ -953,9 +962,9 @@ static int __init sweep2sleep_init(void)
 		pr_warn("%s: sweep2sleep_kobj failed\n", __func__);
 	}
 
-	rc = sysfs_create_file(sweep2sleep_kobj, &dev_attr_sweep2sleep.attr);
-	if (rc)
-		pr_err("%s: sysfs_create_file failed for sweep2sleep\n", __func__);
+    rc = sysfs_create_group(sweep2sleep_kobj, &attr_group);
+    if (rc)
+        pr_warn("%s: sysfs_create_group failed\n", __func__);
 
         uci_add_user_listener(uci_user_listener);
         uci_add_sys_listener(uci_sys_listener);
