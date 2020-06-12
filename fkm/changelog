@@ -1,4 +1,4 @@
-fsociety #1.40
+fsociety #1.41
 06/12/2020
-- CleanSlate features all merged - all credits to @tbalden for his amazing work
-- Linux 4.14.184
+- Disable LTO & CFI - Easy fix for issues with CleanSlate merge & for my ridiculously long build times
+- sched/fair: Skip frequency updates if CPU about to idle - Lower drain playing BT audio with screen off
