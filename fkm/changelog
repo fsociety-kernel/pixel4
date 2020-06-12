@@ -1,5 +1,4 @@
-fsociety #1.37
-06/03/2020
-- June security patch merged
-- Linux 4.14.183
-- Merged latest AnyKernel3 changes from osm0sis
+fsociety #1.40
+06/12/2020
+- CleanSlate features all merged - all credits to @tbalden for his amazing work
+- Linux 4.14.184
