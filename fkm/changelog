@@ -1,4 +1,7 @@
-fsociety #1.41
-06/12/2020
-- Disable LTO & CFI - Easy fix for issues with CleanSlate merge & for my ridiculously long build times
-- sched/fair: Skip frequency updates if CPU about to idle - Lower drain playing BT audio with screen off
+fsociety #1.45
+06/20/2020
+- Powerhal now handled in kernel via sched debooster - no more powerhint module
+- Reverted to stock min & max frequencies 
+- Re-enabled LTO & CFI
+- Reverted simple_lmk from Sultan for stock LMKD from Google
+- Linux 4.14.185
