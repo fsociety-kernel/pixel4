@@ -1,7 +1,10 @@
-fsociety #1.45
-06/20/2020
-- Powerhal now handled in kernel via sched debooster - no more powerhint module
-- Reverted to stock min & max frequencies 
-- Re-enabled LTO & CFI
-- Reverted simple_lmk from Sultan for stock LMKD from Google
-- Linux 4.14.185
+fsociety #1.48
+06/26/2020
+- Linux 4.14.186
+- clang 11.0.3
+- lpm-levels: Allow enforcing deepest cluster idle state selection 
+- sched/fair: reserve prime core for high_cap tasks only 
+- scsi: ufs: Remove 10 ms CPU idle latency unvote timeout
+- Enlarge CONFIG_FRAME_WARN from 2048 to 3072
+- Remove wireguard fetch script & add Wireguard locally
+- fixup file from 4.14.185 merge
