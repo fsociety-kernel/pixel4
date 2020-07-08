@@ -129,7 +129,9 @@ static void check_forced_panel_mode_updates(bool force_mode_change) {
 			uci_set_forced_freq(90, force_mode_change);
 		} else*/
 		{
-			uci_release_forced_freq(force_mode_change);
+			if (screen_on) { // only call release when screen is on, otherwise DSI driver will get locked
+				uci_release_forced_freq(force_mode_change);
+			}
 		}
 	}
 }
