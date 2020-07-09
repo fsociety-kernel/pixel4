@@ -1,4 +1,4 @@
-fsociety #1.49
-07/02/2020
-- Linux 4.14.187
-- ThinLTO enabled
+fsociety #1.50
+07/09/2020
+- Linux 4.14.188
+- dsi-staging: gamme/freq tweaks, call release only while screen on - Fixes a lockup bug in CleanSlate
