@@ -274,6 +274,7 @@ static inline __must_check size_t __ab_c_size(size_t n, size_t size, size_t c)
 	__ab_c_size(n,							\
 		    sizeof(*(p)->member) + __must_be_array((p)->member),\
 		    sizeof(*(p)))
+
 /** check_shl_overflow() - Calculate a left-shifted value and check overflow
  *
  * @a: Value to be shifted
