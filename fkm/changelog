@@ -1,0 +1,9 @@
+fsociety #2.04-q
+07/22/2020
+- Min freqs set back to efficient values
+- Max big & prime freqs capped again
+- Simple_lmk added back & tuned
+- CleanSlate Battery Saver Mode added
+- Linux 4.14.189
+- R beta 2 merged
+- FKM integration added back
