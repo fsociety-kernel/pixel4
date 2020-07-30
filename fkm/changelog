@@ -1,9 +1,9 @@
-fsociety #2.04-q
-07/22/2020
-- Min freqs set back to efficient values
-- Max big & prime freqs capped again
-- Simple_lmk added back & tuned
-- CleanSlate Battery Saver Mode added
-- Linux 4.14.189
-- R beta 2 merged
-- FKM integration added back
+fsociety #2.06-q
+07/30/2020
+- Linux 4.14.190
+- Raise little cluster min freq to 1113600 from 768000
+- Reduce Coral panel-on delay from 120ms to 5ms
+- Reduce Flame panel-on delay from 120ms to 30ms
+- wireguard: Update to version 1.0.20200729
+- wireguard: go back to fetching latest version instead of importing version by version
+- defconfig: set default min freqs
