@@ -1,11 +1,11 @@
 {
   "kernel": {
     "name": "fsociety kernel",
-    "version": "2.06-q",
-    "link": "https://sourceforge.net/projects/fsociety-kernel/files/fsociety%232.06-q.zip/download",
+    "version": "2.07-q",
+    "link": "https://sourceforge.net/projects/fsociety-kernel/files/fsociety%232.07-q.zip/download",
     "changelog_url": "https://github.com/fsociety-kernel/pixel4/raw/master/fkm/changelog",
-    "date": "2020-07-30",
-    "sha1": "e370deddf9c499cae2ac5c2dbe3848203df9fdab"
+    "date": "2020-08-01",
+    "sha1": "fcb85a50fa3f33478eeac87ec872058c1addc61a"
   },
   "support": {
     "link": "https://t.me/fsociety_p4xl"

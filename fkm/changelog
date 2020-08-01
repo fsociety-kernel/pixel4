@@ -1,9 +1,5 @@
-fsociety #2.06-q
-07/30/2020
-- Linux 4.14.190
-- Raise little cluster min freq to 1113600 from 768000
-- Reduce Coral panel-on delay from 120ms to 5ms
-- Reduce Flame panel-on delay from 120ms to 30ms
-- wireguard: Update to version 1.0.20200729
-- wireguard: go back to fetching latest version instead of importing version by version
-- defconfig: set default min freqs
+fsociety #2.07-q
+08/01/2020
+- Linux 4.14.191
+- scsi: ufs: fix a race condition between err handler and clock gate work
+- scsi: ufs: fix clock ungate checks for AH8 error in err handler
