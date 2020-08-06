@@ -5313,7 +5313,7 @@ static int selinux_nlmsg_perm(struct sock *sk, struct sk_buff *skb)
 				secclass_map[sclass - 1].name,
 				task_pid_nr(current), current->comm);
 			if (enforcing_enabled(&selinux_state) &&
-				!security_get_allow_unknown(&selinux_state))
+			    !security_get_allow_unknown(&selinux_state))
 				return rc;
 			rc = 0;
 		} else if (rc == -ENOENT) {
