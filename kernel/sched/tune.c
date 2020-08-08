@@ -675,6 +675,8 @@ boost_write(struct cgroup_subsys_state *css, struct cftype *cft,
 		}
 	} else
 #endif
+	boost = 1;
+
 	st->boost = boost;
 #ifdef CONFIG_UCI
 	st->boost_from_user = boost;
