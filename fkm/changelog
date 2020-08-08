@@ -1,5 +1,9 @@
-fsociety #2.07-q
-08/01/2020
-- Linux 4.14.191
-- scsi: ufs: fix a race condition between err handler and clock gate work
-- scsi: ufs: fix clock ungate checks for AH8 error in err handler
+fsociety #2.10-q
+08/08/2020
+- Merged 4.14.193 & 4.14.192 
+- Merged R beta 3 
+- Imported qcacld from beta 3
+- Added support for spoofing kernel version
+- Decreased panel delay even more, 
+- Merged f2fs-stable 
+- Misc. binder fixes
