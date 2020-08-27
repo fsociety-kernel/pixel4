@@ -1,14 +1,5 @@
-fsociety #2.11-q
-08/23/2020
-- Linux 4.14.194
-- Clang 11.0.4
-- Add lzma ramdisk support for TWRP - still not compatible with Magisk, but I wanted my kernel to have the needed commits
-- Cpu freqs & setyo optimized for drastic speed improvement & optimum efficiency, in line with Artemis Kernel test freqs
-- Enable cpu input boost for app launch only via cpu_input_boost driver
-- Schedtune boost hard-coded to 1
-- Software key debouncer
-- Default 100hz tick rate
-- Force little cluster to use performance governor to offset the schedutil overhead at high, efficient frequencies
-- Tons of cpuidle fixes and optimizations
-- Fix clang 11.0.4 and clang 12 warnings
-- Disabled LTO & CFI - quicker builds and less issues upgrading compiler
+fsociety #2.12-q
+08/27/2020
+- Linux 4.14.195
+- Limit prime cluster max frequency
+- Introduce & enable USB XHCI memory reclaim driver
