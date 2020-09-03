@@ -1,5 +1,4 @@
-fsociety #2.12-q
-08/27/2020
-- Linux 4.14.195
-- Limit prime cluster max frequency
-- Introduce & enable USB XHCI memory reclaim driver
+fsociety #2.13-q
+09/03/2020
+- Linux 4.14.196
+- Allow SOLI for unsupported regions via userland_worker
