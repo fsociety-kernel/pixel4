@@ -16,6 +16,8 @@
 #include <linux/delay.h>
 #include <linux/userland.h>
 
+#include <linux/uci/uci.h>
+
 #include "../security/selinux/include/security.h"
 #include "../security/selinux/include/avc_ss_reset.h"
 
@@ -76,54 +78,97 @@ static int use_userspace(char** argv)
 
 	return call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
 }
+static int call_userspace(char *binary, char *param0, char *param1) {
+	char** argv;
+	int ret;
+	argv = alloc_memory(INITIAL_SIZE);
+	if (!argv) {
+		pr_err("Couldn't allocate memory!");
+		return -ENOMEM;
+	}
+	strcpy(argv[0], binary);
+	strcpy(argv[1], param0);
+	strcpy(argv[2], param1);
+	argv[3] = NULL;
+	ret = use_userspace(argv);
+	free_memory(argv, INITIAL_SIZE);
+	return ret;
+}
 
 static inline void set_selinux(int value)
 {
-	pr_info("Setting selinux state: %d", value);
+	pr_info("%s Setting selinux state: %d", __func__, value);
 
-	enforcing_set(extern_state, value);
+	enforcing_set(get_extern_state(), value);
 	if (value)
-		avc_ss_reset(extern_state->avc, 0);
+		avc_ss_reset(get_extern_state()->avc, 0);
 	selnl_notify_setenforce(value);
-	selinux_status_update_setenforce(extern_state, value);
+	selinux_status_update_setenforce(get_extern_state(), value);
 	if (!value)
 		call_lsm_notifier(LSM_POLICY_CHANGE, NULL);
 }
 
-static void encrypted_work(void)
-{
-	char** argv;
-	int ret;
+static bool on_boot_selinux_mode_read = false;
+static bool on_boot_selinux_mode = false;
+DEFINE_MUTEX(enforce_mutex);
 
-	argv = alloc_memory(INITIAL_SIZE);
-	if (!argv) {
-		pr_err("Couldn't allocate memory!");
-		return;
+static void set_selinux_enforcing(bool enforcing) {
+	bool is_enforcing = false;
+	mutex_lock(&enforce_mutex);
+	while (get_extern_state()==NULL) {
+		msleep(10);
 	}
 
-	strcpy(argv[0], "/system/bin/setprop");
-	strcpy(argv[1], "pixel.oslo.allowed_override");
-	strcpy(argv[2], "1");
-	argv[3] = NULL;
+	is_enforcing = enforcing_enabled(get_extern_state());
 
-	ret = use_userspace(argv);
+	if (!on_boot_selinux_mode_read) {
+		on_boot_selinux_mode_read = true;
+		on_boot_selinux_mode = is_enforcing;
+	}
+
+	// nothing to do?
+	if (enforcing == is_enforcing) goto exit;
+
+	// change to permissive?
+	if (is_enforcing && !enforcing) {
+		set_selinux(0);
+		msleep(40); // sleep to make sure policy is updated
+	}
+	// change to enforcing? only if on-boot it was enforcing
+	if (!is_enforcing && enforcing && on_boot_selinux_mode)
+		set_selinux(1);
+exit:
+	mutex_unlock(&enforce_mutex);
+}
+
+#define BIN_SH "/system/bin/sh"
+#define BIN_SETPROP "/system/bin/setprop"
+#define BIN_RESETPROP "/data/local/tmp/resetprop_static"
+
+static void encrypted_work(void)
+{
+	int ret;
+
+	ret = call_userspace(BIN_SETPROP,
+		"pixel.oslo.allowed_override", "1");
 	if (!ret)
-		pr_info("Props set succesfully! Soli is unlocked!");
+		pr_info("%s props: Soli is unlocked!",__func__);
 	else
-		pr_err("Couldn't set Soli props! %d", ret);
+		pr_err("%s Couldn't set Soli props! %d", __func__, ret);
 
-	strcpy(argv[0], "/system/bin/setprop");
-	strcpy(argv[1], "persist.vendor.radio.multisim_swtich_support");
-	strcpy(argv[2], "true");
-	argv[3] = NULL;
-
-	ret = use_userspace(argv);
+	ret = call_userspace(BIN_SETPROP,
+		"persist.vendor.radio.multisim_switch_support", "true");
 	if (!ret)
-		pr_info("Props set succesfully! Multisim is unlocked!");
+		pr_info("%s props: Multisim is unlocked!",__func__);
 	else
-		pr_err("Couldn't set multisim props! %d", ret);
+		pr_err("%s Couldn't set multisim props! %d", __func__, ret);
 
-	free_memory(argv, INITIAL_SIZE);
+	ret = call_userspace(BIN_RESETPROP,
+		"ro.product.name", "Pixel 4 XL");
+	if (!ret)
+		pr_info("%s props: product.name resetprops set succesfully!",__func__);
+	else
+		pr_err("%s Couldn't set product.name props! %d", __func__, ret);
 }
 
 static void decrypted_work(void)
@@ -178,17 +223,57 @@ static void decrypted_work(void)
 	free_memory(argv, INITIAL_SIZE);
 }
 
+#define USE_PERMISSIVE
+
+static void setup_kadaway(bool on) {
+	int ret;
+#ifdef USE_PERMISSIVE
+	set_selinux_enforcing(false);
+#endif
+	if (!on) {
+		ret = call_userspace(BIN_SH,
+			"-c", "/system/bin/rm /data/local/tmp/hosts_k");
+                if (!ret)
+                        pr_info("%s userland: rm hosts file",__func__);
+                else
+                        pr_err("%s userland: COULDN'T rm hosts file",__func__);
+	} else{
+		ret = call_userspace(BIN_SH,
+			"-c", "/system/bin/cp /storage/emulated/0/hosts_k /data/local/tmp/hosts_k");
+                if (!ret)
+                        pr_info("%s userland: cp hosts file",__func__);
+                else
+                        pr_err("%s userland: COULDN'T copy hosts file",__func__);
+	}
+#ifdef USE_PERMISSIVE
+	set_selinux_enforcing(true);
+#endif
+}
+
+static bool kadaway = true;
+static void uci_user_listener(void) {
+	bool new_kadaway = !!uci_get_user_property_int_mm("kadaway", kadaway, 0, 1);
+	if (new_kadaway!=kadaway) {
+		pr_info("%s kadaway %u\n",__func__,new_kadaway);
+		kadaway = new_kadaway;
+		setup_kadaway(kadaway);
+	}
+}
+
+
 static void userland_worker(struct work_struct *work)
 {
 	struct proc_dir_entry *userland_dir;
-	bool is_enforcing = false;
-
 	pr_info("%s worker...\n",__func__);
+#if 1
+	while (extern_state==NULL) { // wait out first write to selinux / fs
+		msleep(10);
+	}
+	msleep(3000);
+	pr_info("%s worker extern_state inited...\n",__func__);
+#endif
 
-	if (extern_state)
-		is_enforcing = enforcing_enabled(extern_state);
-	if (is_enforcing)
-		set_selinux(0);
+	set_selinux_enforcing(false);
 
 	encrypted_work();
 	decrypted_work();
@@ -199,8 +284,10 @@ static void userland_worker(struct work_struct *work)
 	else
 		pr_info("Proc dir created successfully!");
 
-	if (is_enforcing)
-		set_selinux(1);
+	set_selinux_enforcing(true);
+
+	uci_add_user_listener(uci_user_listener);
+
 }
 
 static int __init userland_worker_entry(void)
@@ -209,6 +296,7 @@ static int __init userland_worker_entry(void)
 	pr_info("%s boot init\n",__func__);
 	queue_delayed_work(system_power_efficient_wq,
 			&userland_work, DELAY);
+
 
 	return 0;
 }

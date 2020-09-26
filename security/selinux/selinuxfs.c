@@ -43,7 +43,11 @@
 #include "objsec.h"
 #include "conditional.h"
 
-struct selinux_state *extern_state;
+struct selinux_state *extern_state = NULL;
+
+struct selinux_state *get_extern_state(void) {
+	return &selinux_state;
+}
 
 enum sel_inos {
 	SEL_ROOT_INO = 2,
