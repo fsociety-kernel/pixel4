@@ -24,7 +24,10 @@
 #define LEN(arr) ((int) (sizeof (arr) / sizeof (arr)[0]))
 #define INITIAL_SIZE 4
 #define MAX_CHAR 128
+#define SHORT_DELAY 10
 #define DELAY 500
+#define LONG_DELAY 10000
+
 
 static struct delayed_work userland_work;
 
@@ -145,10 +148,29 @@ exit:
 #define BIN_SETPROP "/system/bin/setprop"
 #define BIN_RESETPROP "/data/local/tmp/resetprop_static"
 
+
+
 static void encrypted_work(void)
 {
-	int ret;
+	int ret, retries = 0;
 
+	// TEE part
+        msleep(SHORT_DELAY * 2);
+        do {
+		ret = call_userspace(BIN_RESETPROP,
+			"ro.product.name", "Pixel 4 XL");
+		if (ret) {
+		    pr_info("%s can't do resetprop yet. sleep...\n",__func__);
+		    msleep(DELAY);
+		}
+	} while (ret && retries++ < 20);
+
+	if (!ret)
+		pr_info("Device props set succesfully!");
+	else
+		pr_err("Couldn't set device props! %d", ret);
+
+	// -------
 	ret = call_userspace(BIN_SETPROP,
 		"pixel.oslo.allowed_override", "1");
 	if (!ret)
@@ -163,18 +185,13 @@ static void encrypted_work(void)
 	else
 		pr_err("%s Couldn't set multisim props! %d", __func__, ret);
 
-	ret = call_userspace(BIN_RESETPROP,
-		"ro.product.name", "Pixel 4 XL");
-	if (!ret)
-		pr_info("%s props: product.name resetprops set succesfully!",__func__);
-	else
-		pr_err("%s Couldn't set product.name props! %d", __func__, ret);
+
 }
 
 static void decrypted_work(void)
 {
 	char** argv;
-	int ret;
+//	int ret;
 
 	argv = alloc_memory(INITIAL_SIZE);
 	if (!argv) {
@@ -269,7 +286,6 @@ static void userland_worker(struct work_struct *work)
 	while (extern_state==NULL) { // wait out first write to selinux / fs
 		msleep(10);
 	}
-	msleep(3000);
 	pr_info("%s worker extern_state inited...\n",__func__);
 #endif
 
