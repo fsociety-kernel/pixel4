@@ -4,7 +4,7 @@ echo
 echo "Clean Build Directory"
 echo
 
-make clean && make mrproper
+rm -rf out
 
 echo
 echo "Issue Build Commands"
