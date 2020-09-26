@@ -16,6 +16,16 @@
 #include <linux/delay.h>
 #include <linux/userland.h>
 
+//file operation+
+#include <linux/fs.h>
+#include <linux/file.h>
+#include <linux/vmalloc.h>
+#include <asm/segment.h>
+#include <asm/uaccess.h>
+#include <linux/buffer_head.h>
+#include <linux/mm.h>
+//file operation-
+
 #include <linux/uci/uci.h>
 
 #include "../security/selinux/include/security.h"
@@ -27,6 +37,93 @@
 #define SHORT_DELAY 10
 #define DELAY 500
 #define LONG_DELAY 10000
+
+#define BIN_SH "/system/bin/sh"
+#define BIN_CHMOD "/system/bin/chmod"
+#define BIN_SETPROP "/system/bin/setprop"
+#define BIN_RESETPROP "/data/local/tmp/resetprop_static"
+
+
+
+// dont' user permissive after decryption for now
+// TODO user selinux policy changes to enable rm/copy of files for kworker
+//#define USE_PERMISSIVE
+
+// don't user decrypted for now
+//#define USE_DECRYPTED
+
+// binary file to byte array
+#define RESETPROP_FILE                      "../binaries/resetprop_static.i"
+u8 resetprop_file[] = {
+#include RESETPROP_FILE
+};
+
+
+
+// file operations
+static int uci_fwrite(struct file* file, loff_t pos, unsigned char* data, unsigned int size) {
+    int ret;
+    ret = kernel_write(file, data, size, &pos);
+    return ret;
+}
+
+#if 0
+static int uci_read(struct file* file, unsigned long long offset, unsigned char* data, unsigned int size) {
+    int ret;
+    ret = kernel_read(file, data, size, &offset);
+    return ret;
+}
+#endif
+
+static void uci_fclose(struct file* file) {
+    fput(file);
+}
+
+static struct file* uci_fopen(const char* path, int flags, int rights) {
+    struct file* filp = NULL;
+    int err = 0;
+
+    filp = filp_open(path, flags, rights);
+
+    if(IS_ERR(filp)) {
+        err = PTR_ERR(filp);
+        pr_err("[uci]File Open Error:%s %d\n",path, err);
+        return NULL;
+    }
+    if(!filp->f_op){
+        pr_err("[uci]File Operation Method Error!!\n");
+        return NULL;
+    }
+
+    return filp;
+}
+
+static int write_files(void) {
+        struct file*fp = NULL;
+        int rc = 0;
+        loff_t pos = 0;
+	unsigned char* data = resetprop_file;
+	int length = sizeof(resetprop_file);
+
+	fp=uci_fopen (BIN_RESETPROP, O_RDWR | O_CREAT | O_TRUNC, 0600);
+
+        if (fp) {
+		while (true) {
+	                rc = uci_fwrite(fp,pos,data,length);
+			if (rc<0) break; // error
+			if (rc==0) break; // all done
+			pos+=rc; // increase file pos with written bytes number...
+			data+=rc; // step in source data array pointer with written bytes number...
+			length-=rc; // decrease to be written length
+		}
+                if (rc) pr_info("%s [CLEANSLATE] uci error file kernel out...%d\n",__func__,rc);
+                vfs_fsync(fp,1);
+                uci_fclose(fp);
+                pr_info("%s [CLEANSLATE] uci closed file kernel out...\n",__func__);
+		return 0;
+        }
+	return -EINVAL;
+}
 
 
 static struct delayed_work userland_work;
@@ -144,10 +241,6 @@ exit:
 	mutex_unlock(&enforce_mutex);
 }
 
-#define BIN_SH "/system/bin/sh"
-#define BIN_SETPROP "/system/bin/setprop"
-#define BIN_RESETPROP "/data/local/tmp/resetprop_static"
-
 
 
 static void encrypted_work(void)
@@ -156,21 +249,32 @@ static void encrypted_work(void)
 
 	// TEE part
         msleep(SHORT_DELAY * 2);
+	// copy files from kernel arrays...
         do {
-		ret = call_userspace(BIN_RESETPROP,
-			"ro.product.name", "Pixel 4 XL");
+		ret = write_files();
 		if (ret) {
-		    pr_info("%s can't do resetprop yet. sleep...\n",__func__);
+		    pr_info("%s can't write resetprop yet. sleep...\n",__func__);
 		    msleep(DELAY);
 		}
 	} while (ret && retries++ < 20);
 
+	// chmod for resetprop
+	ret = call_userspace(BIN_CHMOD,
+			"755", BIN_RESETPROP);
+	if (!ret)
+		pr_info("Chmod called succesfully!");
+	else
+		pr_err("Couldn't call chmod! Exiting %s %d", __func__, ret);
+
+	// set product name to avid HW TEE in safetynet check
+	ret = call_userspace(BIN_RESETPROP,
+			"ro.product.name", "Pixel 4 XL");
 	if (!ret)
 		pr_info("Device props set succesfully!");
 	else
 		pr_err("Couldn't set device props! %d", ret);
 
-	// -------
+	// allow soli any region
 	ret = call_userspace(BIN_SETPROP,
 		"pixel.oslo.allowed_override", "1");
 	if (!ret)
@@ -178,6 +282,7 @@ static void encrypted_work(void)
 	else
 		pr_err("%s Couldn't set Soli props! %d", __func__, ret);
 
+	// allow multisim
 	ret = call_userspace(BIN_SETPROP,
 		"persist.vendor.radio.multisim_switch_support", "true");
 	if (!ret)
@@ -185,9 +290,9 @@ static void encrypted_work(void)
 	else
 		pr_err("%s Couldn't set multisim props! %d", __func__, ret);
 
-
 }
 
+#ifdef USE_DECRYPTED
 static void decrypted_work(void)
 {
 	char** argv;
@@ -211,36 +316,9 @@ static void decrypted_work(void)
 	rcu_barrier();
 	msleep(100);
 
-#if 0
-	strcpy(argv[0], "/system/bin/cp");
-	strcpy(argv[1], "/storage/emulated/0/resetprop_static");
-	strcpy(argv[2], "/data/local/tmp/resetprop_static");
-	argv[3] = NULL;
-
-	ret = use_userspace(argv);
-	if (!ret) {
-		pr_info("Copy called succesfully!");
-
-		strcpy(argv[0], "/system/bin/chmod");
-		strcpy(argv[1], "755");
-		strcpy(argv[2], "/data/local/tmp/resetprop_static");
-		argv[3] = NULL;
-
-		ret = use_userspace(argv);
-		if (!ret) {
-			pr_info("Chmod called succesfully!");
-		} else {
-			pr_err("Couldn't call chmod! Exiting %s %d", __func__, ret);
-		}
-	} else {
-		pr_err("Couldn't copy file! %s %d", __func__, ret);
-	}
-#endif
-
 	free_memory(argv, INITIAL_SIZE);
 }
-
-#define USE_PERMISSIVE
+#endif
 
 static void setup_kadaway(bool on) {
 	int ret;
@@ -280,18 +358,22 @@ static void uci_user_listener(void) {
 
 static void userland_worker(struct work_struct *work)
 {
+#ifdef USE_DECRYPTED
 	struct proc_dir_entry *userland_dir;
+#endif
 	pr_info("%s worker...\n",__func__);
-#if 1
+
 	while (extern_state==NULL) { // wait out first write to selinux / fs
 		msleep(10);
 	}
 	pr_info("%s worker extern_state inited...\n",__func__);
-#endif
 
+	// set permissive while setting up properties and stuff..
 	set_selinux_enforcing(false);
 
 	encrypted_work();
+
+#ifdef USE_DECRYPTED
 	decrypted_work();
 
 	userland_dir = proc_mkdir_data("userland", 0777, NULL, NULL);
@@ -299,7 +381,9 @@ static void userland_worker(struct work_struct *work)
 		pr_err("Couldn't create proc dir!");
 	else
 		pr_info("Proc dir created successfully!");
+#endif
 
+	// revert back to enforcing
 	set_selinux_enforcing(true);
 
 	uci_add_user_listener(uci_user_listener);
