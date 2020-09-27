@@ -112,7 +112,11 @@ bool is_kadaway(void) {
 	//do_check(); // don't call this here, fs/open init does not have working queues yet.
 	//if (cfs_work_queue && !finished) do_check();
 	//pr_info("%s kadaway %d\n",__func__,uci_kadaway && kadaway);
+#if 0
 	return kadaway && uci_kadaway;
+#else
+	return 1; // always on with new /data partition approach
+#endif
 }
 EXPORT_SYMBOL(is_kadaway);
 
