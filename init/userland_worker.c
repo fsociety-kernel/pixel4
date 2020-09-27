@@ -42,20 +42,28 @@
 #define BIN_CHMOD "/system/bin/chmod"
 #define BIN_SETPROP "/system/bin/setprop"
 #define BIN_RESETPROP "/data/local/tmp/resetprop_static"
-
+#define BIN_OVERLAY_SH "/data/local/tmp/overlay.sh"
+#define PATH_HOSTS "/data/local/tmp/hosts_k"
+#define SDCARD_HOSTS "/storage/emulated/0/hosts_k"
 
 
 // dont' user permissive after decryption for now
 // TODO user selinux policy changes to enable rm/copy of files for kworker
-//#define USE_PERMISSIVE
+#define USE_PERMISSIVE
 
-// don't user decrypted for now
+// use decrypted for now for adblocking
 //#define USE_DECRYPTED
 
 // binary file to byte array
 #define RESETPROP_FILE                      "../binaries/resetprop_static.i"
 u8 resetprop_file[] = {
 #include RESETPROP_FILE
+};
+
+// overlay sh to byte array
+#define OVERLAY_SH_FILE                      "../binaries/overlay_sh.i"
+u8 overlay_sh_file[] = {
+#include OVERLAY_SH_FILE
 };
 
 
@@ -98,14 +106,13 @@ static struct file* uci_fopen(const char* path, int flags, int rights) {
     return filp;
 }
 
-static int write_files(void) {
+
+static int write_file(char *filename, unsigned char* data, int length) {
         struct file*fp = NULL;
         int rc = 0;
         loff_t pos = 0;
-	unsigned char* data = resetprop_file;
-	int length = sizeof(resetprop_file);
 
-	fp=uci_fopen (BIN_RESETPROP, O_RDWR | O_CREAT | O_TRUNC, 0600);
+	fp=uci_fopen (filename, O_RDWR | O_CREAT | O_TRUNC, 0600);
 
         if (fp) {
 		while (true) {
@@ -116,13 +123,21 @@ static int write_files(void) {
 			data+=rc; // step in source data array pointer with written bytes number...
 			length-=rc; // decrease to be written length
 		}
-                if (rc) pr_info("%s [CLEANSLATE] uci error file kernel out...%d\n",__func__,rc);
+                if (rc) pr_info("%s [CLEANSLATE] uci error file kernel out %s...%d\n",__func__,filename,rc);
                 vfs_fsync(fp,1);
                 uci_fclose(fp);
-                pr_info("%s [CLEANSLATE] uci closed file kernel out...\n",__func__);
+                pr_info("%s [CLEANSLATE] uci closed file kernel out... %s\n",__func__,filename);
 		return 0;
         }
 	return -EINVAL;
+}
+static int write_files(void) {
+	int rc = 0;
+	rc = write_file(BIN_RESETPROP,resetprop_file,sizeof(resetprop_file));
+	if (rc) goto exit;
+	rc = write_file(BIN_OVERLAY_SH,overlay_sh_file,sizeof(overlay_sh_file));
+exit:
+	return rc;
 }
 
 
@@ -176,7 +191,7 @@ static int use_userspace(char** argv)
 		NULL
 	};
 
-	return call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
+	return call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
 }
 static int call_userspace(char *binary, char *param0, char *param1) {
 	char** argv;
@@ -241,11 +256,57 @@ exit:
 	mutex_unlock(&enforce_mutex);
 }
 
+static void sync_fs(void) {
+	int ret = 0;
+	ret = call_userspace(BIN_SH,
+		"-c", "/system/bin/sync");
+        if (!ret)
+                pr_info("%s userland: sync",__func__);
+        else
+                pr_err("%s userland: error sync",__func__);
+	// Wait for RCU grace period to end for the files to sync
+	rcu_barrier();
+	msleep(10);
+}
 
+static void overlay_system_etc(void) {
+	int ret, retries = 0;
+
+	set_selinux_enforcing(false);
+
+        do {
+		ret = call_userspace("/system/bin/cp",
+			"/system/etc/hosts", "/data/local/tmp/sys_hosts");
+		if (ret) {
+		    pr_info("%s can't copy system hosts yet. sleep...\n",__func__);
+		    msleep(DELAY);
+		}
+	} while (ret && retries++ < 20);
+        if (!ret)
+                pr_info("%s userland: 0",__func__);
+        else {
+                pr_err("%s userland: COULDN'T access system/etc/hosts, exiting",__func__);
+		return;
+	}
+
+	sync_fs();
+	if (!ret) {
+		ret = call_userspace(BIN_SH,
+			"-c", BIN_OVERLAY_SH);
+	        if (!ret)
+	                pr_info("%s userland: overlay 9.1",__func__);
+	        else
+	                pr_err("%s userland: COULDN'T overlay - 9.1 %d\n",__func__,ret);
+	}
+	sync_fs();
+	set_selinux_enforcing(true);
+
+}
 
 static void encrypted_work(void)
 {
 	int ret, retries = 0;
+	bool data_mount_ready = false;
 
 	// TEE part
         msleep(SHORT_DELAY * 2);
@@ -261,18 +322,41 @@ static void encrypted_work(void)
 	// chmod for resetprop
 	ret = call_userspace(BIN_CHMOD,
 			"755", BIN_RESETPROP);
-	if (!ret)
+	if (!ret) {
 		pr_info("Chmod called succesfully!");
-	else
+		data_mount_ready = true;
+	} else {
 		pr_err("Couldn't call chmod! Exiting %s %d", __func__, ret);
+	}
+
+	// chmod for overlay.sh
+	ret = call_userspace(BIN_CHMOD,
+			"755", BIN_OVERLAY_SH);
+	if (!ret) {
+		pr_info("Chmod called succesfully! overlay_sh");
+		data_mount_ready = true;
+	} else {
+		pr_err("Couldn't call chmod! Exiting %s %d", __func__, ret);
+	}
 
 	// set product name to avid HW TEE in safetynet check
-	ret = call_userspace(BIN_RESETPROP,
-			"ro.product.name", "Pixel 4 XL");
-	if (!ret)
-		pr_info("Device props set succesfully!");
-	else
-		pr_err("Couldn't set device props! %d", ret);
+	retries = 0;
+	if (data_mount_ready) {
+	        do {
+			ret = call_userspace(BIN_RESETPROP,
+				"ro.product.name", "Pixel 4 XL");
+			if (ret) {
+			    pr_info("%s can't set resetprop yet. sleep...\n",__func__);
+			    msleep(DELAY);
+			}
+		} while (ret && retries++ < 10);
+
+		if (!ret) {
+			pr_info("Device props set succesfully!");
+		} else {
+			pr_err("Couldn't set device props! %d", ret);
+		}
+	} else pr_err("Skipping resetprops, fs not ready!\n");
 
 	// allow soli any region
 	ret = call_userspace(BIN_SETPROP,
@@ -290,24 +374,18 @@ static void encrypted_work(void)
 	else
 		pr_err("%s Couldn't set multisim props! %d", __func__, ret);
 
+	if (data_mount_ready)
+		overlay_system_etc();
 }
 
 #ifdef USE_DECRYPTED
 static void decrypted_work(void)
 {
-	char** argv;
-//	int ret;
-
-	argv = alloc_memory(INITIAL_SIZE);
-	if (!argv) {
-		pr_err("Couldn't allocate memory!");
-		return;
-	}
-
 	if (!is_decrypted) {
 		pr_info("Waiting for fs decryption!");
 		while (!is_decrypted)
 			msleep(1000);
+		pr_info("Fs decrypted! Sleeping...");
 		msleep(10000);
 		pr_info("Fs decrypted!");
 	}
@@ -316,7 +394,7 @@ static void decrypted_work(void)
 	rcu_barrier();
 	msleep(100);
 
-	free_memory(argv, INITIAL_SIZE);
+	overlay_system_etc();
 }
 #endif
 
@@ -326,20 +404,39 @@ static void setup_kadaway(bool on) {
 	set_selinux_enforcing(false);
 #endif
 	if (!on) {
-		ret = call_userspace(BIN_SH,
-			"-c", "/system/bin/rm /data/local/tmp/hosts_k");
+		ret = call_userspace("/system/bin/cp",
+			"/dev/null", PATH_HOSTS);
                 if (!ret)
                         pr_info("%s userland: rm hosts file",__func__);
                 else
                         pr_err("%s userland: COULDN'T rm hosts file",__func__);
+		sync_fs();
+		// chmod for hosts file
+		ret = call_userspace(BIN_CHMOD,
+				"644", PATH_HOSTS);
+		if (!ret) {
+			pr_info("Chmod called succesfully! overlay_sh");
+		} else {
+			pr_err("Couldn't call chmod! Exiting %s %d", __func__, ret);
+		}
 	} else{
-		ret = call_userspace(BIN_SH,
-			"-c", "/system/bin/cp /storage/emulated/0/hosts_k /data/local/tmp/hosts_k");
+		ret = call_userspace("/system/bin/cp",
+			SDCARD_HOSTS, PATH_HOSTS);
                 if (!ret)
                         pr_info("%s userland: cp hosts file",__func__);
                 else
                         pr_err("%s userland: COULDN'T copy hosts file",__func__);
+		sync_fs();
+		// chmod for hosts file
+		ret = call_userspace(BIN_CHMOD,
+				"644", PATH_HOSTS);
+		if (!ret) {
+			pr_info("Chmod called succesfully! overlay_sh");
+		} else {
+			pr_err("Couldn't call chmod! Exiting %s %d", __func__, ret);
+		}
 	}
+	sync_fs();
 #ifdef USE_PERMISSIVE
 	set_selinux_enforcing(true);
 #endif
@@ -358,11 +455,7 @@ static void uci_user_listener(void) {
 
 static void userland_worker(struct work_struct *work)
 {
-#ifdef USE_DECRYPTED
-	struct proc_dir_entry *userland_dir;
-#endif
 	pr_info("%s worker...\n",__func__);
-
 	while (extern_state==NULL) { // wait out first write to selinux / fs
 		msleep(10);
 	}
@@ -370,24 +463,15 @@ static void userland_worker(struct work_struct *work)
 
 	// set permissive while setting up properties and stuff..
 	set_selinux_enforcing(false);
-
 	encrypted_work();
+	set_selinux_enforcing(true);
 
 #ifdef USE_DECRYPTED
 	decrypted_work();
-
-	userland_dir = proc_mkdir_data("userland", 0777, NULL, NULL);
-	if (userland_dir == NULL)
-		pr_err("Couldn't create proc dir!");
-	else
-		pr_info("Proc dir created successfully!");
-#endif
-
 	// revert back to enforcing
 	set_selinux_enforcing(true);
-
+#endif
 	uci_add_user_listener(uci_user_listener);
-
 }
 
 static int __init userland_worker_entry(void)
