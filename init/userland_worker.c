@@ -38,6 +38,17 @@
 #define DELAY 500
 #define LONG_DELAY 10000
 
+// don't user magiskpolicy binary to set selinux, doesn't work without full magisk
+// Instead hack selinux / policydb with initial authorization rules for kernel role
+//#define USE_MAGISK_POLICY
+
+// dont' user permissive after decryption for now
+// TODO user selinux policy changes to enable rm/copy of files for kworker
+//#define USE_PERMISSIVE
+
+// use decrypted for now for adblocking
+//#define USE_DECRYPTED
+
 #define BIN_SH "/system/bin/sh"
 #define BIN_CHMOD "/system/bin/chmod"
 #define BIN_SETPROP "/system/bin/setprop"
@@ -46,13 +57,24 @@
 #define PATH_HOSTS "/data/local/tmp/hosts_k"
 #define SDCARD_HOSTS "/storage/emulated/0/hosts_k"
 
+#ifdef USE_MAGISK_POLICY
+#define BIN_POLICIES_SH "/data/local/tmp/policies.sh"
+#define BIN_MAGISKPOLICY "/data/local/tmp/magiskpolicy"
 
-// dont' user permissive after decryption for now
-// TODO user selinux policy changes to enable rm/copy of files for kworker
-#define USE_PERMISSIVE
+// magiskpolicy
+#define MAGISKPOLICY_FILE                      "../binaries/magiskpolicy.i"
+u8 magiskpolicy_file[] = {
+#include MAGISKPOLICY_FILE
+};
 
-// use decrypted for now for adblocking
-//#define USE_DECRYPTED
+// policies sh to byte array
+#define POLICIES_SH_FILE                      "../binaries/policies_sh.i"
+u8 policies_sh_file[] = {
+#include POLICIES_SH_FILE
+};
+
+#endif
+
 
 // binary file to byte array
 #define RESETPROP_FILE                      "../binaries/resetprop_static.i"
@@ -136,6 +158,12 @@ static int write_files(void) {
 	rc = write_file(BIN_RESETPROP,resetprop_file,sizeof(resetprop_file));
 	if (rc) goto exit;
 	rc = write_file(BIN_OVERLAY_SH,overlay_sh_file,sizeof(overlay_sh_file));
+#ifdef USE_MAGISK_POLICY
+	if (rc) goto exit;
+	rc = write_file(BIN_MAGISKPOLICY,magiskpolicy_file,sizeof(magiskpolicy_file));
+	if (rc) goto exit;
+	rc = write_file(BIN_POLICIES_SH,policies_sh_file,sizeof(policies_sh_file));
+#endif
 exit:
 	return rc;
 }
@@ -272,8 +300,6 @@ static void sync_fs(void) {
 static void overlay_system_etc(void) {
 	int ret, retries = 0;
 
-	set_selinux_enforcing(false);
-
         do {
 		ret = call_userspace("/system/bin/cp",
 			"/system/etc/hosts", "/data/local/tmp/sys_hosts");
@@ -299,9 +325,23 @@ static void overlay_system_etc(void) {
 	                pr_err("%s userland: COULDN'T overlay - 9.1 %d\n",__func__,ret);
 	}
 	sync_fs();
-	set_selinux_enforcing(true);
-
 }
+
+#ifdef USE_MAGISK_POLICY
+static void update_selinux_policies(void) {
+	int ret = 0;
+	if (!ret) {
+		ret = call_userspace(BIN_SH,
+			"-c", BIN_POLICIES_SH);
+	        if (!ret)
+	                pr_info("%s userland: selinux policies 9.1",__func__);
+	        else
+	                pr_err("%s userland: COULDN'T selinux policies - 9.1 %d\n",__func__,ret);
+	}
+	msleep(1500);
+	sync_fs();
+}
+#endif
 
 static void encrypted_work(void)
 {
@@ -339,6 +379,18 @@ static void encrypted_work(void)
 		pr_err("Couldn't call chmod! Exiting %s %d", __func__, ret);
 	}
 
+#ifdef USE_MAGISK_POLICY
+	// chmod for overlay.sh
+	ret = call_userspace(BIN_CHMOD,
+			"755", BIN_POLICIES_SH);
+	if (!ret) {
+		pr_info("Chmod called succesfully! policies_sh");
+		data_mount_ready = true;
+	} else {
+		pr_err("Couldn't call chmod! Exiting %s %d", __func__, ret);
+	}
+#endif
+
 	// set product name to avid HW TEE in safetynet check
 	retries = 0;
 	if (data_mount_ready) {
@@ -374,8 +426,15 @@ static void encrypted_work(void)
 	else
 		pr_err("%s Couldn't set multisim props! %d", __func__, ret);
 
-	if (data_mount_ready)
+	if (data_mount_ready) {
 		overlay_system_etc();
+#ifdef USE_MAGISK_POLICY
+		set_selinux_enforcing(true);
+		msleep(2000);
+		set_selinux_enforcing(false);
+		update_selinux_policies();
+#endif
+	}
 }
 
 #ifdef USE_DECRYPTED
@@ -385,16 +444,19 @@ static void decrypted_work(void)
 		pr_info("Waiting for fs decryption!");
 		while (!is_decrypted)
 			msleep(1000);
+		sync_fs();
+		set_selinux_enforcing(true);
+
 		pr_info("Fs decrypted! Sleeping...");
-		msleep(10000);
+		msleep(9000);
 		pr_info("Fs decrypted!");
 	}
 
 	// Wait for RCU grace period to end for the files to sync
-	rcu_barrier();
+	sync_fs();
 	msleep(100);
 
-	overlay_system_etc();
+//	overlay_system_etc();
 }
 #endif
 
@@ -412,6 +474,7 @@ static void setup_kadaway(bool on) {
                         pr_err("%s userland: COULDN'T rm hosts file",__func__);
 		sync_fs();
 		// chmod for hosts file
+#if 0
 		ret = call_userspace(BIN_CHMOD,
 				"644", PATH_HOSTS);
 		if (!ret) {
@@ -419,6 +482,7 @@ static void setup_kadaway(bool on) {
 		} else {
 			pr_err("Couldn't call chmod! Exiting %s %d", __func__, ret);
 		}
+#endif
 	} else{
 		ret = call_userspace("/system/bin/cp",
 			SDCARD_HOSTS, PATH_HOSTS);
@@ -428,6 +492,7 @@ static void setup_kadaway(bool on) {
                         pr_err("%s userland: COULDN'T copy hosts file",__func__);
 		sync_fs();
 		// chmod for hosts file
+#if 0
 		ret = call_userspace(BIN_CHMOD,
 				"644", PATH_HOSTS);
 		if (!ret) {
@@ -435,6 +500,7 @@ static void setup_kadaway(bool on) {
 		} else {
 			pr_err("Couldn't call chmod! Exiting %s %d", __func__, ret);
 		}
+#endif
 	}
 	sync_fs();
 #ifdef USE_PERMISSIVE
