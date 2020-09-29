@@ -1,6 +1,9 @@
 #!/system/bin/sh
 #umount /system/etc/hosts
 
+rm /data/local/tmp/hosts_k
+unzip /data/local/tmp/hosts_k.zip -d /data/local/tmp/ -o
+
 touch /data/local/tmp/hosts_k
 chmod 644 /data/local/tmp/hosts_k
 chcon u:object_r:system_file:s0 /data/local/tmp/hosts_k
