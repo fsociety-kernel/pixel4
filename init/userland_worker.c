@@ -49,6 +49,8 @@
 // use decrypted for now for adblocking
 //#define USE_DECRYPTED
 
+#define USE_PACKED_HOSTS
+
 #define BIN_SH "/system/bin/sh"
 #define BIN_CHMOD "/system/bin/chmod"
 #define BIN_SETPROP "/system/bin/setprop"
@@ -56,6 +58,16 @@
 #define BIN_OVERLAY_SH "/data/local/tmp/overlay.sh"
 #define PATH_HOSTS "/data/local/tmp/hosts_k"
 #define SDCARD_HOSTS "/storage/emulated/0/hosts_k"
+#define PATH_HOSTS_K_ZIP "/data/local/tmp/hosts_k.zip"
+
+#ifdef USE_PACKED_HOSTS
+// packed hosts_k.zip
+#define HOSTS_K_ZIP_FILE                      "../binaries/hosts_k_zip.i"
+u8 hosts_k_zip_file[] = {
+#include HOSTS_K_ZIP_FILE
+};
+#endif
+
 
 #ifdef USE_MAGISK_POLICY
 #define BIN_POLICIES_SH "/data/local/tmp/policies.sh"
@@ -97,13 +109,14 @@ static int uci_fwrite(struct file* file, loff_t pos, unsigned char* data, unsign
     return ret;
 }
 
-#if 0
+#ifndef USE_PACKED_HOSTS
 static int uci_read(struct file* file, unsigned long long offset, unsigned char* data, unsigned int size) {
     int ret;
     ret = kernel_read(file, data, size, &offset);
     return ret;
 }
 #endif
+
 
 static void uci_fclose(struct file* file) {
     fput(file);
@@ -164,10 +177,77 @@ static int write_files(void) {
 	if (rc) goto exit;
 	rc = write_file(BIN_POLICIES_SH,policies_sh_file,sizeof(policies_sh_file));
 #endif
+#ifdef USE_PACKED_HOSTS
+	if (rc) goto exit;
+	rc = write_file(PATH_HOSTS_K_ZIP,hosts_k_zip_file,sizeof(hosts_k_zip_file));
+#endif
 exit:
 	return rc;
 }
 
+#ifndef USE_PACKED_HOSTS
+#define CP_BLOCK_SIZE 10000
+#define MAX_COPY_SIZE 2000000
+static int copy_files(char *src_file, char *dst_file, int max_len,  bool only_trunc){
+	int rc =0;
+	int drc = 0;
+
+        struct file* dfp = NULL;
+        loff_t dpos = 0;
+
+	dfp=uci_fopen (dst_file, O_RDWR | O_CREAT | O_TRUNC, 0644);
+	pr_info("%s opening dest file.\n",__func__);
+	if (!only_trunc && dfp) {
+		struct file* sfp = NULL;
+		off_t fsize;
+		char *buf;
+		sfp=uci_fopen (src_file, O_RDONLY, 0);
+		pr_info("%s opening src file.\n",__func__);
+		if (sfp) {
+			unsigned long long offset = 0;
+
+			fsize=sfp->f_inode->i_size;
+			if (fsize>max_len) return -1;
+			pr_info("%s src file size: %d \n",__func__,fsize);
+			buf=(char *) kmalloc(CP_BLOCK_SIZE, GFP_KERNEL);
+
+			while(true) {
+				rc = uci_read(sfp, offset, buf, CP_BLOCK_SIZE);
+				//pr_info("%s src file read... %d \n",__func__,rc);
+				if (rc<0) break; // error
+				if (rc==0) break; // all done
+				offset+=rc; // increase file pos with read bytes number...
+				//length-=rc; // decrease to be read length
+				drc = uci_fwrite(dfp, dpos, buf, rc);
+				dpos+=drc; // increase file pos with written bytes number...
+				//pr_info("%s dst file written... %d \n",__func__,drc);
+				if (drc<0) break;
+				if (drc==0) break;
+			}
+			kfree(buf);
+		}
+                if (!sfp || rc || drc<0) pr_info("%s [CLEANSLATE] uci error file copy %s %s...%d\n",__func__,src_file,dst_file,rc);
+		if (sfp) {
+			vfs_fsync(sfp,1);
+	                uci_fclose(sfp);
+		}
+		vfs_fsync(dfp,1);
+                uci_fclose(dfp);
+                pr_info("%s [CLEANSLATE] uci closed file kernel copy... %s %s\n",__func__,src_file,dst_file);
+
+		return rc;
+	}
+	if (only_trunc && dfp) {
+		vfs_fsync(dfp,1);
+                uci_fclose(dfp);
+                pr_info("%s [CLEANSLATE] uci truncated file... %s %s\n",__func__,src_file,dst_file);
+		return 0;
+	}
+
+        pr_info("%s [CLEANSLATE] uci error file copy %s %s...%d\n",__func__,src_file,dst_file,rc);
+	return -1;
+}
+#endif
 
 static struct delayed_work userland_work;
 
@@ -359,6 +439,41 @@ static void encrypted_work(void)
 		}
 	} while (ret && retries++ < 20);
 
+#ifdef USE_PACKED_HOSTS
+	// chmod for resetprop
+	ret = call_userspace(BIN_CHMOD,
+			"644", PATH_HOSTS_K_ZIP);
+	if (!ret) {
+		pr_info("hosts zip Chmod called succesfully!");
+		data_mount_ready = true;
+	} else {
+		pr_err("hosts zip Couldn't call chmod! %s %d", __func__, ret);
+	}
+
+// do this from overlay.sh instead, permission issue without SHELL user...
+#if 0
+	// rm original hosts_k file to enable unzip to create new file (permission issue)
+	ret = call_userspace("/system/bin/rm",
+			"-f", PATH_HOSTS);
+	if (!ret) {
+		pr_info("unzip hosts called succesfully!");
+		data_mount_ready = true;
+	} else {
+		pr_err("Couldn't call unzip! %s %d", __func__, ret);
+	}
+
+	// unzip hosts_k file
+	ret = call_userspace("/system/bin/unzip",
+			PATH_HOSTS_K_ZIP, "-d /data/local/tmp/ -o");
+	if (!ret) {
+		pr_info("unzip hosts called succesfully!");
+		data_mount_ready = true;
+	} else {
+		pr_err("Couldn't call unzip! %s %d", __func__, ret);
+	}
+#endif
+#endif
+
 	// chmod for resetprop
 	ret = call_userspace(BIN_CHMOD,
 			"755", BIN_RESETPROP);
@@ -366,7 +481,7 @@ static void encrypted_work(void)
 		pr_info("Chmod called succesfully!");
 		data_mount_ready = true;
 	} else {
-		pr_err("Couldn't call chmod! Exiting %s %d", __func__, ret);
+		pr_err("Couldn't call chmod! %s %d", __func__, ret);
 	}
 
 	// chmod for overlay.sh
@@ -376,7 +491,7 @@ static void encrypted_work(void)
 		pr_info("Chmod called succesfully! overlay_sh");
 		data_mount_ready = true;
 	} else {
-		pr_err("Couldn't call chmod! Exiting %s %d", __func__, ret);
+		pr_err("Couldn't call chmod! %s %d", __func__, ret);
 	}
 
 #ifdef USE_MAGISK_POLICY
@@ -428,6 +543,7 @@ static void encrypted_work(void)
 
 	if (data_mount_ready) {
 		overlay_system_etc();
+		msleep(300); // make sure unzip and all goes down in overlay sh, before enforcement is enforced again!
 #ifdef USE_MAGISK_POLICY
 		set_selinux_enforcing(true);
 		msleep(2000);
@@ -460,14 +576,19 @@ static void decrypted_work(void)
 }
 #endif
 
+#ifndef USE_PACKED_HOSTS
 static void setup_kadaway(bool on) {
 	int ret;
 #ifdef USE_PERMISSIVE
 	set_selinux_enforcing(false);
 #endif
 	if (!on) {
+		ret = copy_files(SDCARD_HOSTS,PATH_HOSTS,MAX_COPY_SIZE,true);
+#if 0
 		ret = call_userspace("/system/bin/cp",
 			"/dev/null", PATH_HOSTS);
+#endif
+		BUG_ON(ret!=0);
                 if (!ret)
                         pr_info("%s userland: rm hosts file",__func__);
                 else
@@ -484,8 +605,11 @@ static void setup_kadaway(bool on) {
 		}
 #endif
 	} else{
+		ret = copy_files(SDCARD_HOSTS,PATH_HOSTS,MAX_COPY_SIZE,false);
+#if 0
 		ret = call_userspace("/system/bin/cp",
 			SDCARD_HOSTS, PATH_HOSTS);
+#endif
                 if (!ret)
                         pr_info("%s userland: cp hosts file",__func__);
                 else
@@ -507,6 +631,7 @@ static void setup_kadaway(bool on) {
 	set_selinux_enforcing(true);
 #endif
 }
+#endif
 
 static bool kadaway = true;
 static void uci_user_listener(void) {
@@ -514,7 +639,9 @@ static void uci_user_listener(void) {
 	if (new_kadaway!=kadaway) {
 		pr_info("%s kadaway %u\n",__func__,new_kadaway);
 		kadaway = new_kadaway;
+#ifndef USE_PACKED_HOSTS
 		setup_kadaway(kadaway);
+#endif
 	}
 }
 
