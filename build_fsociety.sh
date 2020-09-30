@@ -20,6 +20,11 @@ export CROSS_COMPILE=~/aarch64-linux-android-4.9/bin/aarch64-linux-android-
 export CROSS_COMPILE_ARM32=~/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-
 export LD_LIBRARY_PATH=~/linux-x86/clang-r399163b/lib:$LD_LIBRARY_PATH
 
+echo "Generating binary conversions"
+cd binaries
+./convert
+cd ..
+
 echo
 echo "Set DEFCONFIG"
 echo
