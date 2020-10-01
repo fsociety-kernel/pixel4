@@ -259,6 +259,19 @@ static void store_doubletap_touch(void) {
 	last_tap_jiffies = jiffies;
 }
 
+/* reset on finger release (or gesture end longtap) - if gesture still screenon / finger down, reset_filter_coords should be false! */
+static void sweep2sleep_reset(bool reset_filter_coords) {
+	exec_count = true;
+	barrier[0] = false;
+	barrier[1] = false;
+	firstx = 0;
+	first_event = false;
+	scr_on_touch = false;
+	if (reset_filter_coords) {
+		filter_coords_status = false;
+	}
+}
+
 static void sweep2sleep_longtap_count(struct work_struct * sweep2sleep_longtap_count_work) {
 	unsigned int last_tap_time_diff = 0;
 	mutex_lock(&longtapworklock);
@@ -284,6 +297,8 @@ static void sweep2sleep_longtap_count(struct work_struct * sweep2sleep_longtap_c
 			reset_doubletap_tracking();
 			reset_longtap_tracking();
 			if (get_s2s_doubletap_mode()==1) { // power button mode - long tap -> notif down
+				touch_down_called = false;
+				sweep2sleep_reset(false); // make sure gesture tracking for sweep stops... BUT don't stop freeze cords! LONG tap means finger still down
 				vib_power = 100;
 				schedule_work(&sweep2sleep_vib_work);
 				write_uci_out("fp_touch");
@@ -304,18 +319,6 @@ exit_mutex:
 static DECLARE_WORK(sweep2sleep_longtap_count_work, sweep2sleep_longtap_count);
 
 
-/* reset on finger release */
-static void sweep2sleep_reset(bool reset_filter_coords) {
-	exec_count = true;
-	barrier[0] = false;
-	barrier[1] = false;
-	firstx = 0;
-	first_event = false;
-	scr_on_touch = false;
-	if (reset_filter_coords) {
-		filter_coords_status = false;
-	}
-}
 
 
 /* Sweep2sleep main function */
