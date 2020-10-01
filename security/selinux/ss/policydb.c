@@ -2303,6 +2303,11 @@ out:
 	return rc;
 }
 
+#if 0
+static struct ebitmap previous_caps;
+static int first_bitmap_read = 1;
+#endif
+
 /*
  * Read the configuration data from a policy database binary
  * representation file into a policy database structure.
@@ -2406,6 +2411,17 @@ int policydb_read(struct policydb *p, void *fp)
 
 	if (p->policyvers >= POLICYDB_VERSION_POLCAP) {
 		rc = ebitmap_read(&p->policycaps, fp);
+#if 0
+		if (first_bitmap_read) {
+			ebitmap_cpy(&previous_caps,&p->policycaps);
+			pr_info("%s [cleanslate] first read of capabilities... %d\n",__func__,previous_caps.highbit);
+			first_bitmap_read = 0;
+		} else {
+			int cmp = ebitmap_cmp(&previous_caps,&p->policycaps);
+			pr_info("%s [cleanslate] read of capabilities. Differs? %d  prev high %d, new high %d \n",__func__, cmp, previous_caps.highbit, p->policycaps.highbit);
+			ebitmap_cpy(&previous_caps,&p->policycaps);
+		}
+#endif
 		if (rc)
 			goto bad;
 	}
@@ -2453,7 +2469,9 @@ int policydb_read(struct policydb *p, void *fp)
 	p->process_class = string_to_security_class(p, "process");
 	if (!p->process_class)
 		goto bad;
-
+#if 0
+	// parsing avtab
+#endif
 	rc = avtab_read(&p->te_avtab, fp, p);
 	if (rc)
 		goto bad;

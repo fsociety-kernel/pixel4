@@ -65,6 +65,44 @@ static inline int avtab_hash(struct avtab_key *keyp, u32 mask)
 	return hash & mask;
 }
 
+#ifdef CONFIG_UCI
+static inline int avtab_hash_2(struct avtab_key *keyp)
+{
+	static const u32 c1 = 0xcc9e2d51;
+	static const u32 c2 = 0x1b873593;
+	static const u32 r1 = 15;
+	static const u32 r2 = 13;
+	static const u32 m  = 5;
+	static const u32 n  = 0xe6546b64;
+
+	u32 hash = 0;
+
+#define mix(input) { \
+	u32 v = input; \
+	v *= c1; \
+	v = (v << r1) | (v >> (32 - r1)); \
+	v *= c2; \
+	hash ^= v; \
+	hash = (hash << r2) | (hash >> (32 - r2)); \
+	hash = hash * m + n; \
+}
+
+	mix(keyp->target_class);
+	mix(keyp->target_type);
+	mix(keyp->source_type);
+
+#undef mix
+
+	hash ^= hash >> 16;
+	hash *= 0x85ebca6b;
+	hash ^= hash >> 13;
+	hash *= 0xc2b2ae35;
+	hash ^= hash >> 16;
+
+	return hash;
+}
+#endif
+
 static struct avtab_node*
 avtab_insert_node(struct avtab *h, int hvalue,
 		  struct avtab_node *prev, struct avtab_node *cur,
@@ -386,6 +424,20 @@ static uint16_t spec_order[] = {
 	AVTAB_XPERMS_DONTAUDIT
 };
 
+
+#ifdef CONFIG_UCI
+
+//#define LOG_NEW_AVTABS
+
+#define MAX_AV_EL 70000
+static int avtab_hash_set[MAX_AV_EL] = {0};
+static int avtab_max = 0;
+static int curr_item = 0;
+static int should_log = 0;
+static int initial_run = 1;
+
+#endif
+
 int avtab_read_item(struct avtab *a, void *fp, struct policydb *pol,
 		    int (*insertf)(struct avtab *a, struct avtab_key *k,
 				   struct avtab_datum *d, void *p),
@@ -487,6 +539,29 @@ int avtab_read_item(struct avtab *a, void *fp, struct policydb *pol,
 	key.target_type = le16_to_cpu(buf16[items++]);
 	key.target_class = le16_to_cpu(buf16[items++]);
 	key.specified = le16_to_cpu(buf16[items++]);
+#ifdef CONFIG_UCI
+	should_log = 0;
+#ifdef LOG_NEW_AVTABS
+// enable this  part to detect SEPolicy ids, while you use magiskpolicy to add them
+// check dmesg for log elements, to identify source/target/class and specified / data
+	{
+		int av_key = avtab_hash_2(&key);
+		int i = 0;
+		bool found = false;
+		for (;i<avtab_max;i++) {
+			if ( avtab_hash_set[i] == av_key ) {
+				found = true;
+			}
+		}
+		if (!found) {
+			pr_info("%s [cleanslate] curr_item: %d - loading new avtab: %u %u %u %u - key: %u \n",__func__,curr_item,
+				key.source_type, key.target_type, key.target_class, key.specified, av_key);
+			if (initial_run) avtab_hash_set[avtab_max++] = av_key;
+			should_log = 1;
+		}
+	}
+#endif
+#endif
 
 	if (!policydb_type_isvalid(pol, key.source_type) ||
 	    !policydb_type_isvalid(pol, key.target_type) ||
@@ -529,7 +604,21 @@ int avtab_read_item(struct avtab *a, void *fp, struct policydb *pol,
 			return rc;
 		}
 		for (i = 0; i < ARRAY_SIZE(xperms.perms.p); i++)
+#ifdef CONFIG_UCI
+		{
+#endif
 			xperms.perms.p[i] = le32_to_cpu(buf32[i]);
+#ifdef CONFIG_UCI
+#ifdef LOG_NEW_AVTABS
+			if (!initial_run) {
+				if (should_log) {
+					// logging xperms
+					pr_info("%s [cleanslate] curr_item: %d - loading perms: %d %u\n",__func__,curr_item, i, xperms.perms.p[i]);
+				}
+			}
+#endif
+		}
+#endif
 		datum.u.xperms = &xperms;
 	} else {
 		rc = next_entry(buf32, fp, sizeof(u32));
@@ -538,6 +627,16 @@ int avtab_read_item(struct avtab *a, void *fp, struct policydb *pol,
 			return rc;
 		}
 		datum.u.data = le32_to_cpu(*buf32);
+#ifdef CONFIG_UCI
+#ifdef LOG_NEW_AVTABS
+		if (!initial_run) {
+			if (should_log) {
+				// loggin permission data (ids of search /  open etc...
+				pr_info("%s [cleanslate] curr_item: %d - loading data: %u\n",__func__,curr_item, datum.u.data);
+			}
+		}
+#endif
+#endif
 	}
 	if ((key.specified & AVTAB_TYPE) &&
 	    !policydb_type_isvalid(pol, datum.u.data)) {
@@ -552,6 +651,26 @@ static int avtab_insertf(struct avtab *a, struct avtab_key *k,
 {
 	return avtab_insert(a, k, d);
 }
+
+#ifdef CONFIG_UCI
+
+#define UCI_AVTAB_NUM 6
+
+static int avtab_insert_numeric(struct avtab *a, u16 source, u16 target, u16 class, u16 specified, u32 data) {
+	struct avtab_key key;
+	struct avtab_datum datum;
+	//struct avtab_extended_perms xperms;
+
+	memset(&key, 0, sizeof(struct avtab_key));
+	memset(&datum, 0, sizeof(struct avtab_datum));
+	key.source_type = source;
+	key.target_type = target;
+	key.target_class = class;
+	key.specified = specified;
+	datum.u.data = data;
+	return  avtab_insertf(a, &key, &datum, NULL);
+}
+#endif
 
 int avtab_read(struct avtab *a, void *fp, struct policydb *pol)
 {
@@ -571,12 +690,51 @@ int avtab_read(struct avtab *a, void *fp, struct policydb *pol)
 		rc = -EINVAL;
 		goto bad;
 	}
-
+#ifndef CONFIG_UCI
 	rc = avtab_alloc(a, nel);
 	if (rc)
 		goto bad;
+#else
+	// here we add the extra rules for kernel role...
+	rc = avtab_alloc(a, nel + UCI_AVTAB_NUM);
+	if (rc)
+		goto bad;
+
+	// hack
+	if (initial_run) {
+		rc = avtab_insert_numeric(a,
+			737, 488, 7, 1, 268435456);
+
+		rc = avtab_insert_numeric(a,
+			737, 385, 6, 1, 262160);
+
+		rc = avtab_insert_numeric(a,
+			737, 1195, 6, 1, 33834000);
+
+		rc = avtab_insert_numeric(a,
+			737, 474, 7, 1, 268435456);
+
+		rc = avtab_insert_numeric(a,
+			737, 385, 7, 1, 268435456);
+
+		rc = avtab_insert_numeric(a,
+			737, 1176, 6, 1, 33834000);
+
+		if (rc) {
+			if (rc == -ENOMEM)
+				printk(KERN_ERR "SELinux: avtab: out of memory\n");
+			else if (rc == -EEXIST)
+				printk(KERN_ERR "SELinux: avtab: duplicate entry\n");
+			goto bad;
+		}
+	}
+
+#endif
 
 	for (i = 0; i < nel; i++) {
+#ifdef CONFIG_UCI
+		curr_item = i;
+#endif
 		rc = avtab_read_item(a, fp, pol, avtab_insertf, NULL);
 		if (rc) {
 			if (rc == -ENOMEM)
@@ -587,6 +745,9 @@ int avtab_read(struct avtab *a, void *fp, struct policydb *pol)
 			goto bad;
 		}
 	}
+#ifdef CONFIG_UCI
+	initial_run = 0;
+#endif
 
 	rc = 0;
 out:
