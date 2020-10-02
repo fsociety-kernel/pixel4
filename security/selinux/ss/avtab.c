@@ -23,6 +23,11 @@
 #include "avtab.h"
 #include "policydb.h"
 
+#ifdef UCI_POLICIES
+extern int uci_security_context_str_to_sid(const char *scontext, u32 *sid, gfp_t gfp);
+#endif
+
+
 static struct kmem_cache *avtab_node_cachep;
 static struct kmem_cache *avtab_xperms_cachep;
 
@@ -690,10 +695,62 @@ int avtab_read(struct avtab *a, void *fp, struct policydb *pol)
 		rc = -EINVAL;
 		goto bad;
 	}
-#ifndef CONFIG_UCI
+#if 1
+//ndef CONFIG_UCI
 	rc = avtab_alloc(a, nel);
 	if (rc)
 		goto bad;
+#ifdef UCI_POLICIES
+        {
+                char *scon = NULL, *tcon = NULL;
+                int rc = 0;
+                u32 ssid, tsid;
+		u32 ssid_kernel;
+		u32 tsid_shell_exec, tsid_toolbox_exec, tsid_kernel, tsid_shell_data_file, tsid_mnt_user_file, tsid_fuse;
+
+                scon = "u:r:kernel:s0";
+                rc  = uci_security_context_str_to_sid(scon, &ssid, GFP_KERNEL);
+		ssid_kernel = ssid;
+
+                tcon = "u:object_r:shell_exec:s0";
+                rc  = uci_security_context_str_to_sid(tcon, &tsid, GFP_KERNEL);
+		tsid_shell_exec = tsid;
+                pr_info("%s [cleanslate] ssid parsed %s -> %u tsid parsed %s -> %u RC: %d\n",__func__,scon,ssid,tcon,tsid,rc);
+
+                scon = "kernel";
+                rc  = uci_security_context_str_to_sid(scon, &ssid, GFP_KERNEL);
+                tcon = "u:object_r:toolbox_exec:s0";
+                rc  = uci_security_context_str_to_sid(tcon, &tsid, GFP_KERNEL);
+		tsid_toolbox_exec = tsid;
+                pr_info("%s [cleanslate] ssid parsed %s -> %u tsid parsed %s -> %u RC: %d\n",__func__,scon,ssid,tcon,tsid,rc);
+                scon = "kernel";
+                rc  = uci_security_context_str_to_sid(scon, &ssid, GFP_KERNEL);
+
+                tcon = "u:r:kernel:s0";
+                rc  = uci_security_context_str_to_sid(tcon, &tsid, GFP_KERNEL);
+		tsid_kernel = tsid;
+                pr_info("%s [cleanslate] ssid parsed %s -> %u tsid parsed %s -> %u RC: %d\n",__func__,scon,ssid,tcon,tsid,rc);
+                
+                tcon = "u:object_r:shell_data_file:s0";
+                rc  = uci_security_context_str_to_sid(tcon, &tsid, GFP_KERNEL);
+		tsid_shell_data_file = tsid;
+                pr_info("%s [cleanslate] ssid parsed %s -> %u tsid parsed %s -> %u RC: %d\n",__func__,scon,ssid,tcon,tsid,rc);
+                
+                tcon = "u:object_r:mnt_user_file:s0";
+                rc  = uci_security_context_str_to_sid(tcon, &tsid, GFP_KERNEL);
+		tsid_mnt_user_file = tsid;
+                pr_info("%s [cleanslate] ssid parsed %s -> %u tsid parsed %s -> %u RC: %d\n",__func__,scon,ssid,tcon,tsid,rc);
+                
+                tcon = "u:object_r:fuse:s0";
+                rc  = uci_security_context_str_to_sid(tcon, &tsid, GFP_KERNEL);
+		tsid_fuse = tsid;
+                pr_info("%s [cleanslate] ssid parsed %s -> %u tsid parsed %s -> %u RC: %d\n",__func__,scon,ssid,tcon,tsid,rc);
+                tcon = "u:object_r:fuse:s0";
+                rc  = uci_security_context_str_to_sid(tcon, &tsid, GFP_KERNEL);
+                pr_info("%s [cleanslate] ssid parsed %s -> %u tsid parsed %s -> %u RC: %d\n",__func__,scon,ssid,tcon,tsid,rc);
+        }
+#endif
+
 #else
 	// here we add the extra rules for kernel role...
 	rc = avtab_alloc(a, nel + UCI_AVTAB_NUM);

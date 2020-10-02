@@ -70,6 +70,12 @@
 #include "ebitmap.h"
 #include "audit.h"
 
+//#define UCI_POLICIES
+
+#ifdef CONFIG_UCI
+#include <linux/userland.h>
+#endif
+
 /* Policy capability names */
 const char *selinux_policycap_names[__POLICYDB_CAPABILITY_MAX] = {
 	"network_peer_controls",
@@ -1575,6 +1581,18 @@ int security_context_str_to_sid(struct selinux_state *state,
 	return security_context_to_sid(state, scontext, strlen(scontext),
 				       sid, gfp);
 }
+#ifdef UCI_POLICIES
+int uci_security_context_str_to_sid(const char *scontext, u32 *sid, gfp_t gfp)
+{
+	if (get_extern_state()==NULL) {
+		pr_err("%s [cleanslate] can't use extern_state NULL\n",__func__);
+		return -99;
+	}
+	return security_context_to_sid(get_extern_state(), scontext, strlen(scontext),
+				       sid, gfp);
+}
+EXPORT_SYMBOL(uci_security_context_str_to_sid);
+#endif
 
 /**
  * security_context_to_sid_default - Obtain a SID for a given security context,
@@ -2278,6 +2296,43 @@ err:
 	policydb_destroy(newpolicydb);
 
 out:
+#ifdef UCI_POLICIES
+        {
+                char *scon = NULL, *tcon = NULL;
+                int rc = 0;
+                u32 ssid, tsid;
+
+                scon = "u:r:kernel:s0";
+                rc  = uci_security_context_str_to_sid(scon, &ssid, GFP_KERNEL);
+                tcon = "u:object_r:shell_exec:s0";
+                rc  = uci_security_context_str_to_sid(tcon, &tsid, GFP_KERNEL);
+                pr_info("%s [cleanslate] ssid parsed %s -> %u tsid parsed %s -> %u RC: %d\n",__func__,scon,ssid,tcon,tsid,rc);
+
+                scon = "kernel";
+                rc  = uci_security_context_str_to_sid(scon, &ssid, GFP_KERNEL);
+                tcon = "u:object_r:toolbox_exec:s0";
+                rc  = uci_security_context_str_to_sid(tcon, &tsid, GFP_KERNEL);
+                pr_info("%s [cleanslate] ssid parsed %s -> %u tsid parsed %s -> %u RC: %d\n",__func__,scon,ssid,tcon,tsid,rc);
+                scon = "kernel";
+                rc  = uci_security_context_str_to_sid(scon, &ssid, GFP_KERNEL);
+
+                tcon = "u:r:kernel:s0";
+                rc  = uci_security_context_str_to_sid(tcon, &tsid, GFP_KERNEL);
+                pr_info("%s [cleanslate] ssid parsed %s -> %u tsid parsed %s -> %u RC: %d\n",__func__,scon,ssid,tcon,tsid,rc);
+
+                tcon = "u:object_r:shell_data_file:s0";
+                rc  = uci_security_context_str_to_sid(tcon, &tsid, GFP_KERNEL);
+                pr_info("%s [cleanslate] ssid parsed %s -> %u tsid parsed %s -> %u RC: %d\n",__func__,scon,ssid,tcon,tsid,rc);
+
+                tcon = "u:object_r:mnt_user_file:s0";
+                rc  = uci_security_context_str_to_sid(tcon, &tsid, GFP_KERNEL);
+                pr_info("%s [cleanslate] ssid parsed %s -> %u tsid parsed %s -> %u RC: %d\n",__func__,scon,ssid,tcon,tsid,rc);
+
+                tcon = "u:object_r:fuse:s0";
+                rc  = uci_security_context_str_to_sid(tcon, &tsid, GFP_KERNEL);
+                pr_info("%s [cleanslate] ssid parsed %s -> %u tsid parsed %s -> %u RC: %d\n",__func__,scon,ssid,tcon,tsid,rc);
+        }
+#endif
 	kfree(oldpolicydb);
 	return rc;
 }
