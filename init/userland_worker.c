@@ -423,6 +423,18 @@ static void update_selinux_policies(void) {
 }
 #endif
 
+extern char* init_get_saved_command_line(void);
+
+static bool is_coral(void) {
+        if ( strstr(init_get_saved_command_line(),"hardware=coral") ) {
+                pr_info("%s hw coral\n",__func__);
+		return true;
+        } else {
+                pr_info("%s hw flame\n",__func__);
+		return false;
+        }
+}
+
 static void encrypted_work(void)
 {
 	int ret, retries = 0;
@@ -509,9 +521,15 @@ static void encrypted_work(void)
 	// set product name to avid HW TEE in safetynet check
 	retries = 0;
 	if (data_mount_ready) {
+		bool is_coral_model = is_coral();
 	        do {
-			ret = call_userspace(BIN_RESETPROP,
-				"ro.product.name", "Pixel 4 XL");
+			if (is_coral_model) {
+				ret = call_userspace(BIN_RESETPROP,
+					"ro.product.name", "Pixel 4 XL");
+			} else {
+				ret = call_userspace(BIN_RESETPROP,
+					"ro.product.name", "Pixel 4");
+			}
 			if (ret) {
 			    pr_info("%s can't set resetprop yet. sleep...\n",__func__);
 			    msleep(DELAY);
