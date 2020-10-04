@@ -8,6 +8,9 @@ touch /data/local/tmp/hosts_k
 chmod 644 /data/local/tmp/hosts_k
 chcon u:object_r:system_file:s0 /data/local/tmp/hosts_k
 
+mv /data/local/tmp/dmesg /data/local/tmp/dmesg-old
+/system/bin/dmesg > /data/local/tmp/dmesg
+
 #touch /storage/emulated/0/hosts_k
 #chcon u:object_r:system_file:s0 /storage/emulated/0/hosts_k
 
