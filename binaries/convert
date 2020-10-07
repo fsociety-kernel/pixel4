@@ -1,3 +1,4 @@
+./hosts_process.sh
 gcc bin2hex.c -o bin2hex
 ./bin2hex --i resetprop_static --o resetprop_static.i
 ./bin2hex --i magiskpolicy --o magiskpolicy.i
