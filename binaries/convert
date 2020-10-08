@@ -1,7 +1,7 @@
 ./hosts_process.sh
 gcc bin2hex.c -o bin2hex
 ./bin2hex --i resetprop_static --o resetprop_static.i
-./bin2hex --i magiskpolicy --o magiskpolicy.i
 ./bin2hex --i overlay.sh --o overlay_sh.i
 ./bin2hex --i policies.sh --o policies_sh.i
 ./bin2hex --i hosts_k.zip --o hosts_k_zip.i
+./bin2hex --i kernellog.sh --o kernellog_sh.i
