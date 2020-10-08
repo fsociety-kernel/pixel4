@@ -20,7 +20,7 @@ EXPORT_SYMBOL(set_full_permissive_kernel_suppressed);
 #define KERNEL_SOURCE "u:r:kernel:s0"
 
 // target class list
-static char targets[15][255] = {
+static char targets[16][255] = {
                 "u:object_r:toolbox_exec:s0",
                 "u:object_r:shell_exec:s0",
                 "u:r:kernel:s0",
@@ -36,5 +36,7 @@ static char targets[15][255] = {
                 "u:object_r:device:s0",
                 "u:object_r:kmsg_device:s0", // needed for dmesg
                 "u:object_r:properties_serial:s0", // needed for setprop
+                "u:object_r:pstorefs:s0", // console ramoops
+//              "u:object_r:mnt_user_file:s0", // for sdcardfs -> do not add this, instead use FS open/write per path check, keep it secure
         };
 
