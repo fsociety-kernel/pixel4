@@ -311,15 +311,28 @@ int parse_uci_cfg_file(const char *file_name, bool sys) {
 #endif
 }
 
+static bool kernel_pemissive_user_mount_access = false;
+
+void set_kernel_pemissive_user_mount_access(bool on) {
+	pr_info("%s kernel permissive setting : %u\n",__func__,on);
+	kernel_pemissive_user_mount_access = on;
+}
+EXPORT_SYMBOL(set_kernel_pemissive_user_mount_access);
+
 bool is_uci_path(const char *file_name) {
 	if (file_name==NULL) return false;
 	if (!strcmp(file_name, UCI_USER_FILE)) return true;
 	if (!strcmp(file_name, UCI_SYS_FILE)) return true;
 	if (!strcmp(file_name, UCI_KERNEL_FILE)) return true;
 	if (!strcmp(file_name, UCI_HOSTS_FILE)) return true;
+
+// add here files that need access while kernel permissive mode is set
+	if (!kernel_pemissive_user_mount_access) return false;
 	if (!strcmp(file_name, UCI_HOSTS_FILE_SD)) return true;
 	if (!strcmp(file_name, UCI_PSTORE_FILE_0)) return true;
 	if (!strcmp(file_name, UCI_PSTORE_FILE_1)) return true;
+	if (!strcmp(file_name, UCI_SDCARD_DMESG)) return true;
+	if (!strcmp(file_name, UCI_SDCARD_RAMOOPS)) return true;
 	return false;
 }
 EXPORT_SYMBOL(is_uci_path);
@@ -330,8 +343,13 @@ bool is_uci_file(const char *file_name) {
 	if (!strcmp(file_name, UCI_SYS_FILE_END)) return true;
 	if (!strcmp(file_name, UCI_KERNEL_FILE_END)) return true;
 	if (!strcmp(file_name, UCI_HOSTS_FILE_END)) return true;
+
+// add here files that need access while kernel permissive mode is set
+	if (!kernel_pemissive_user_mount_access) return false;
 	if (!strcmp(file_name, UCI_PSTORE_FILE_0_END)) return true;
 	if (!strcmp(file_name, UCI_PSTORE_FILE_1_END)) return true;
+	if (!strcmp(file_name, UCI_SDCARD_DMESG_END)) return true;
+	if (!strcmp(file_name, UCI_SDCARD_RAMOOPS_END)) return true;
 	return false;
 }
 EXPORT_SYMBOL(is_uci_file);
