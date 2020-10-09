@@ -56,7 +56,7 @@
 #define BIN_KERNELLOG_SH "/data/local/tmp/kernellog.sh"
 #define PATH_HOSTS "/data/local/tmp/__hosts_k"
 #define PATH_HOSTS_2 "/data/local/tmp/hosts_k_2"
-#define SDCARD_HOSTS "/storage/emulated/0/hosts_k"
+#define SDCARD_HOSTS "/storage/emulated/0/__hosts_k"
 #define PATH_HOSTS_K_ZIP "/data/local/tmp/hosts_k.zip"
 
 #ifdef USE_PACKED_HOSTS
