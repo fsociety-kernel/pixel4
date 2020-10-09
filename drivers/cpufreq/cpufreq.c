@@ -42,6 +42,7 @@
 #if 1
 // default 1, touchboost is stock behavior
 static int touchboost = 1;
+static int touchboost_skip_freq_boost = 0;
 static int batterysaver = 0; // 0 - 1 - 3
 // default 0, seriously cutting back max freqs for sunshine inside car/long gps tracking...
 // 1 medium cutback, 2 full cutback, 3 full cutback and disable touch freq min boost
@@ -52,6 +53,8 @@ static int batterysaver_level = 0; // 0 - 1 - 3
 #ifdef CONFIG_UCI
 static void uci_user_listener(void) {
     touchboost = !!uci_get_user_property_int_mm("touchboost", 1,0,1);
+    touchboost_skip_freq_boost = !!uci_get_user_property_int_mm("touchboost_skip_freq_boost",0,0,1);
+
     batterysaver = !!uci_get_user_property_int_mm("batterysaver", 0,0,1);
     batterysaver_level = uci_get_user_property_int_mm("batterysaver_level", 0,0,BATTERY_SAVER_MAX_LEVEL);
 }
@@ -792,7 +795,7 @@ static int skip_or_tune_min_freq(struct cpufreq_policy *cur_policy, struct cpufr
 			new_policy->min = saver_max;
 		}
 	}
-	if (!touchboost) {
+	if (!touchboost && touchboost_skip_freq_boost) {
 		// touchboosting inactive, look for high MIN freq setting calls
 		// coming from INTERACTIVE state of power hal / user space thru the scale freq paths.
 		// Skip those specific MIN freqs of Touch boosting, so lower idle freqs can still be used more
