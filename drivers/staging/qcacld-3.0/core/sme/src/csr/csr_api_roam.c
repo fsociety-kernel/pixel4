@@ -58,6 +58,10 @@
 #include "wlan_mlme_main.h"
 #include "wlan_scan_utils_api.h"
 
+#ifdef CONFIG_USERLAND_WORKER
+#include <linux/uci/uci.h>
+#endif
+
 #define MAX_PWR_FCC_CHAN_12 8
 #define MAX_PWR_FCC_CHAN_13 2
 
@@ -16125,6 +16129,17 @@ QDF_STATUS csr_send_join_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 		}
 		qdf_mem_copy(&csr_join_req->selfMacAddr, &pSession->selfMacAddr,
 			     sizeof(tSirMacAddr));
+#ifdef CONFIG_USERLAND_WORKER
+		{
+			char ssidName[SIR_MAC_MAX_SSID_LENGTH+1];
+			int i;
+			for (i=0; i<csr_join_req->ssId.length; i++) {
+				ssidName[i] = csr_join_req->ssId.ssId[i];
+			}
+			ssidName[csr_join_req->ssId.length]='\0';
+			uci_set_current_ssid(ssidName);
+		}
+#endif
 		sme_err("Connecting to ssid:%.*s bssid: "MAC_ADDRESS_STR" rssi: %d channel: %d country_code: %c%c",
 			csr_join_req->ssId.length, csr_join_req->ssId.ssId,
 			MAC_ADDR_ARRAY(pBssDescription->bssId),
