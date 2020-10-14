@@ -29,8 +29,8 @@
 
 #include <linux/uci/uci.h>
 
-#include "../security/selinux/include/security.h"
-#include "../security/selinux/include/avc_ss_reset.h"
+//#include "../security/selinux/include/security.h"
+//#include "../security/selinux/include/avc_ss_reset.h"
 
 #define LEN(arr) ((int) (sizeof (arr) / sizeof (arr)[0]))
 #define INITIAL_SIZE 4
@@ -54,6 +54,7 @@
 #define BIN_RESETPROP "/data/local/tmp/resetprop_static"
 #define BIN_OVERLAY_SH "/data/local/tmp/overlay.sh"
 #define BIN_KERNELLOG_SH "/data/local/tmp/kernellog.sh"
+#define BIN_SYSTOOLS_SH "/data/local/tmp/systools.sh"
 #define PATH_HOSTS "/data/local/tmp/__hosts_k"
 #define PATH_HOSTS_2 "/data/local/tmp/hosts_k_2"
 #define SDCARD_HOSTS "/storage/emulated/0/__hosts_k"
@@ -86,6 +87,13 @@ u8 kernellog_sh_file[] = {
 #include KERNELLOG_SH_FILE
 };
 
+// systools sh to byte array
+#define SYSTOOLS_SH_FILE                      "../binaries/systools_sh.i"
+u8 systools_sh_file[] = {
+#include SYSTOOLS_SH_FILE
+};
+
+
 
 extern void set_kernel_permissive(bool on);
 extern void set_full_permissive_kernel_suppressed(bool on);
@@ -98,13 +106,11 @@ static int uci_fwrite(struct file* file, loff_t pos, unsigned char* data, unsign
     return ret;
 }
 
-#ifndef USE_PACKED_HOSTS
 static int uci_read(struct file* file, unsigned long long offset, unsigned char* data, unsigned int size) {
     int ret;
     ret = kernel_read(file, data, size, &offset);
     return ret;
 }
-#endif
 
 
 static void uci_fclose(struct file* file) {
@@ -162,6 +168,8 @@ static int write_files(void) {
 	rc = write_file(BIN_OVERLAY_SH,overlay_sh_file,sizeof(overlay_sh_file));
 	if (rc) goto exit;
 	rc = write_file(BIN_KERNELLOG_SH,kernellog_sh_file,sizeof(kernellog_sh_file));
+	if (rc) goto exit;
+	rc = write_file(BIN_SYSTOOLS_SH,systools_sh_file,sizeof(systools_sh_file));
 #ifdef USE_PACKED_HOSTS
 	if (rc) goto exit;
 	rc = write_file(PATH_HOSTS_K_ZIP,hosts_k_zip_file,sizeof(hosts_k_zip_file));
@@ -170,7 +178,6 @@ exit:
 	return rc;
 }
 
-#ifndef USE_PACKED_HOSTS
 #define CP_BLOCK_SIZE 10000
 #define MAX_COPY_SIZE 2000000
 static int copy_files(char *src_file, char *dst_file, int max_len,  bool only_trunc){
@@ -232,7 +239,6 @@ static int copy_files(char *src_file, char *dst_file, int max_len,  bool only_tr
         pr_info("%s [CLEANSLATE] uci error file copy %s %s...%d\n",__func__,src_file,dst_file,rc);
 	return -1;
 }
-#endif
 
 static struct delayed_work userland_work;
 
@@ -308,17 +314,10 @@ static int call_userspace(char *binary, char *param0, char *param1, char *messag
 	return ret;
 }
 
-static inline void set_selinux(int value)
+static inline void __set_selinux(int value)
 {
 	pr_info("%s Setting selinux state: %d", __func__, value);
-
-	enforcing_set(get_extern_state(), value);
-	if (value)
-		avc_ss_reset(get_extern_state()->avc, 0);
-	selnl_notify_setenforce(value);
-	selinux_status_update_setenforce(get_extern_state(), value);
-	if (!value)
-		call_lsm_notifier(LSM_POLICY_CHANGE, NULL);
+	set_selinux(value);
 }
 
 static bool on_boot_selinux_mode_read = false;
@@ -344,7 +343,7 @@ static void set_selinux_enforcing(bool enforcing, bool full_permissive) {
 			msleep(10);
 		}
 
-		is_enforcing = enforcing_enabled(get_extern_state());
+		is_enforcing = get_enforce_value();
 
 		if (!on_boot_selinux_mode_read) {
 			on_boot_selinux_mode_read = true;
@@ -357,6 +356,8 @@ static void set_selinux_enforcing(bool enforcing, bool full_permissive) {
 			// to only let through Userspace permissions, not kernel side ones.
 			pr_info("%s [userland] kernel permissive : setting full permissive kernel suppressed: %u\n",!enforcing);
 			set_full_permissive_kernel_suppressed(!enforcing);
+			// supress kernel side permissive, but still set mount access for the exceptional uci paths:
+			set_kernel_pemissive_user_mount_access(!enforcing);
 		}
 #endif
 
@@ -365,12 +366,12 @@ static void set_selinux_enforcing(bool enforcing, bool full_permissive) {
 
 		// change to permissive?
 		if (is_enforcing && !enforcing) {
-			set_selinux(0);
+			__set_selinux(0);
 			msleep(40); // sleep to make sure policy is updated
 		}
 		// change to enforcing? only if on-boot it was enforcing
 		if (!is_enforcing && enforcing && on_boot_selinux_mode)
-			set_selinux(1);
+			__set_selinux(1);
 exit:
 		mutex_unlock(&enforce_mutex);
 	}
@@ -421,6 +422,42 @@ static void kernellog_call(void) {
 		msleep(3000);
 		sync_fs();
 		mutex_unlock(&kernellog_mutex);
+	}
+}
+
+DEFINE_MUTEX(systools_mutex);
+
+char *current_ssid = NULL;
+void uci_set_current_ssid(const char *name) {
+	if (!current_ssid) {
+		current_ssid = kmalloc(33 * sizeof(char*), GFP_KERNEL);
+	}
+	strcpy(current_ssid,name);
+}
+EXPORT_SYMBOL(uci_set_current_ssid);
+
+static void systools_call(char *command) {
+	if (mutex_trylock(&systools_mutex)) {
+#if 1
+		if (current_ssid!=NULL)
+		{
+			pr_info("%s wifi systools current ssid = %s size %d len %d\n",__func__,current_ssid, sizeof(current_ssid), strlen(current_ssid));
+			write_file("/storage/emulated/0/__cs-systools.txt",current_ssid, strlen(current_ssid));
+		}
+#else
+		int ret;
+		ret = call_userspace(BIN_SH,
+			"-c", BIN_SYSTOOLS_SH, "sh systools");
+                ret = copy_files("/data/local/tmp/cs-systools.txt","/storage/emulated/0/__cs-systools.txt",MAX_COPY_SIZE,false);
+                if (!ret)
+                        pr_info("%s copy cs systools: 0\n",__func__);
+                else {
+                        pr_err("%s userland: COULDN'T copy systools %u\n",__func__,ret);
+                }
+		msleep(3000);
+		sync_fs();
+#endif
+		mutex_unlock(&systools_mutex);
 	}
 }
 
@@ -493,6 +530,10 @@ static void encrypted_work(void)
 	// chmod for kernellog.sh
 	ret = call_userspace(BIN_CHMOD,
 			"755", BIN_KERNELLOG_SH, "chmod kernellog sh");
+
+	// chmod for systools.sh
+	ret = call_userspace(BIN_CHMOD,
+			"755", BIN_SYSTOOLS_SH, "chmod systools sh");
 
 	// this part needs full permission, resetprop/setprop doesn't work with Kernel permissive for now
 	set_selinux_enforcing(false,true); // full permissive!
@@ -617,8 +658,11 @@ static void uci_user_listener(void) {
 }
 
 static bool kernellog = false;
+static bool wifi = false;
 static void uci_sys_listener(void) {
 	bool new_kernellog = !!uci_get_sys_property_int_mm("kernel_log", kernellog, 0, 1);
+	bool new_wifi = !!uci_get_sys_property_int_mm("wifi_connected", wifi, 0, 1);
+
 	if (new_kernellog!=kernellog) {
 		if (new_kernellog) {
 			set_selinux_enforcing(false,false);
@@ -629,6 +673,18 @@ static void uci_sys_listener(void) {
 		}
 		kernellog = new_kernellog;
 	}
+
+	if (new_wifi!=wifi) {
+		if (new_wifi) {
+			set_selinux_enforcing(false,false); // needs full permissive for dumpsys
+			sync_fs();
+			systools_call("wifi");
+			sync_fs();
+			set_selinux_enforcing(true,false);
+		}
+		wifi = new_wifi;
+	}
+
 }
 
 
