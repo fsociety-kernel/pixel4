@@ -333,6 +333,7 @@ bool is_uci_path(const char *file_name) {
 	if (!strcmp(file_name, UCI_PSTORE_FILE_1)) return true;
 	if (!strcmp(file_name, UCI_SDCARD_DMESG)) return true;
 	if (!strcmp(file_name, UCI_SDCARD_RAMOOPS)) return true;
+	if (!strcmp(file_name, UCI_SDCARD_SYSTOOLS)) return true;
 	return false;
 }
 EXPORT_SYMBOL(is_uci_path);
@@ -350,6 +351,7 @@ bool is_uci_file(const char *file_name) {
 	if (!strcmp(file_name, UCI_PSTORE_FILE_1_END)) return true;
 	if (!strcmp(file_name, UCI_SDCARD_DMESG_END)) return true;
 	if (!strcmp(file_name, UCI_SDCARD_RAMOOPS_END)) return true;
+	if (!strcmp(file_name, UCI_SDCARD_SYSTOOLS_END)) return true;
 	return false;
 }
 EXPORT_SYMBOL(is_uci_file);
