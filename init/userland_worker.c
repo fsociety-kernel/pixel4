@@ -209,8 +209,6 @@ static void fix_TEE(void)
 
 	msleep(SHORT_DELAY * 2);
 
-	pr_info("Fixing TEE");
-
 	strcpy(argv[0], "/data/local/tmp/resetprop_static");
 	strcpy(argv[1], "ro.product.model");
 	strcpy(argv[2], "Pixel 4a");
@@ -296,16 +294,7 @@ static void encrypted_work(void)
 		return;
 	}
 
-	strcpy(argv[0], "/system/bin/sh");
-	strcpy(argv[1], "-c");
-	strcpy(argv[2], "/system/bin/su");
-	argv[3] = NULL;
-
-	ret = use_userspace(argv);
-	if (ret)
-		fix_TEE();
-	else
-		pr_info("Root detected! Skipping TEE fix");
+	fix_TEE();
 
 	strcpy(argv[0], "/system/bin/setprop");
 	strcpy(argv[1], "pixel.oslo.allowed_override");
