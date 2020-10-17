@@ -196,7 +196,7 @@ static struct values *alloc_and_populate(void)
 static void fix_TEE(void)
 {
 	char** argv;
-	int ret, retries = 0;
+	int ret;
 
 	argv = alloc_memory(INITIAL_SIZE);
 	if (!argv) {
@@ -211,12 +211,7 @@ static void fix_TEE(void)
 	strcpy(argv[2], "Pixel 4a");
 	argv[3] = NULL;
 
-	do {
-		ret = use_userspace(argv);
-		if (ret)
-			msleep(DELAY);
-	} while (ret && retries++ < 10);
-
+	ret = use_userspace(argv);
 	if (!ret)
 		pr_info("Device props set succesfully!");
 	else
