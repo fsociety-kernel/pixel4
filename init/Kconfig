@@ -1215,6 +1215,11 @@ config USERLAND_WORKER
 	  Enabling this option will give you access to userspace
 	  functions, being able to call them from the kernel space.
 
+config USERLAND_WORKER_DATA_LOCAL
+	bool "For userland driver use data/local/tmp storage instead of /dev/"
+	help
+	  For userland driver use data/local/tmp storage instead of /dev/
+
 config SYSCTL
 	bool
 

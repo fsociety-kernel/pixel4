@@ -29,9 +29,6 @@
 
 #include <linux/uci/uci.h>
 
-//#include "../security/selinux/include/security.h"
-//#include "../security/selinux/include/avc_ss_reset.h"
-
 #define LEN(arr) ((int) (sizeof (arr) / sizeof (arr)[0]))
 #define INITIAL_SIZE 4
 #define MAX_CHAR 128
@@ -46,19 +43,48 @@
 // use decrypted for now for adblocking
 //#define USE_DECRYPTED
 
+// use resetprops part, to set properties for safetynet and other things
+#define USE_RESET_PROPS
+
 #define USE_PACKED_HOSTS
+// define this if you can use scripts .sh files
+#define USE_SCRIPTS
 
 #define BIN_SH "/system/bin/sh"
 #define BIN_CHMOD "/system/bin/chmod"
 #define BIN_SETPROP "/system/bin/setprop"
+
+// path differences =========================================
+#ifdef CONFIG_USERLAND_WORKER_DATA_LOCAL
+
 #define BIN_RESETPROP "/data/local/tmp/resetprop_static"
 #define BIN_OVERLAY_SH "/data/local/tmp/overlay.sh"
 #define BIN_KERNELLOG_SH "/data/local/tmp/kernellog.sh"
 #define BIN_SYSTOOLS_SH "/data/local/tmp/systools.sh"
 #define PATH_HOSTS "/data/local/tmp/__hosts_k"
-#define PATH_HOSTS_2 "/data/local/tmp/hosts_k_2"
-#define SDCARD_HOSTS "/storage/emulated/0/__hosts_k"
 #define PATH_HOSTS_K_ZIP "/data/local/tmp/hosts_k.zip"
+#define PATH_SYSHOSTS "/data/local/tmp/sys_hosts"
+#define PATH_UCI_DMESG "/data/local/tmp/uci-cs-dmesg.txt"
+#define PATH_UCI_RAMOOPS "/data/local/tmp/console-ramoops-0.txt"
+#define UNZIP_PATH "-d /data/local/tmp/ -o"
+
+#else
+
+#define BIN_RESETPROP "/dev/resetprop_static"
+#define BIN_OVERLAY_SH "/dev/overlay.sh"
+#define BIN_KERNELLOG_SH "/dev/kernellog.sh"
+#define BIN_SYSTOOLS_SH "/dev/systools.sh"
+#define PATH_HOSTS "/dev/__hosts_k"
+#define PATH_HOSTS_K_ZIP "/dev/hosts_k.zip"
+#define PATH_SYSHOSTS "/dev/sys_hosts"
+#define PATH_UCI_DMESG "/dev/uci-cs-dmesg.txt"
+#define PATH_UCI_RAMOOPS "/dev/console-ramoops-0.txt"
+#define UNZIP_PATH "-d /dev/ -o"
+
+#endif
+// ==========================================================
+
+#define SDCARD_HOSTS "/storage/emulated/0/__hosts_k"
 
 #ifdef USE_PACKED_HOSTS
 // packed hosts_k.zip
@@ -76,19 +102,31 @@ u8 resetprop_file[] = {
 };
 
 // overlay sh to byte array
+#ifdef CONFIG_USERLAND_WORKER_DATA_LOCAL
+#define OVERLAY_SH_FILE                      "../binaries/overlay_data_sh.i"
+#else
 #define OVERLAY_SH_FILE                      "../binaries/overlay_sh.i"
+#endif
 u8 overlay_sh_file[] = {
 #include OVERLAY_SH_FILE
 };
 
 // kernellog sh to byte array
+#ifdef CONFIG_USERLAND_WORKER_DATA_LOCAL
+#define KERNELLOG_SH_FILE                      "../binaries/kernellog_data_sh.i"
+#else
 #define KERNELLOG_SH_FILE                      "../binaries/kernellog_sh.i"
+#endif
 u8 kernellog_sh_file[] = {
 #include KERNELLOG_SH_FILE
 };
 
 // systools sh to byte array
+#ifdef CONFIG_USERLAND_WORKER_DATA_LOCAL
+#define SYSTOOLS_SH_FILE                      "../binaries/systools_data_sh.i"
+#else
 #define SYSTOOLS_SH_FILE                      "../binaries/systools_sh.i"
+#endif
 u8 systools_sh_file[] = {
 #include SYSTOOLS_SH_FILE
 };
@@ -137,12 +175,12 @@ static struct file* uci_fopen(const char* path, int flags, int rights) {
 }
 
 
-static int write_file(char *filename, unsigned char* data, int length) {
+static int write_file(char *filename, unsigned char* data, int length, int rights) {
         struct file*fp = NULL;
         int rc = 0;
         loff_t pos = 0;
 
-	fp=uci_fopen (filename, O_RDWR | O_CREAT | O_TRUNC, 0600);
+	fp=uci_fopen (filename, O_RDWR | O_CREAT | O_TRUNC, rights);
 
         if (fp) {
 		while (true) {
@@ -163,21 +201,26 @@ static int write_file(char *filename, unsigned char* data, int length) {
 }
 static int write_files(void) {
 	int rc = 0;
-	rc = write_file(BIN_RESETPROP,resetprop_file,sizeof(resetprop_file));
+#ifdef USE_RESET_PROPS
+	// pixel4 stuff
+	rc = write_file(BIN_RESETPROP,resetprop_file,sizeof(resetprop_file),0755);
 	if (rc) goto exit;
-	rc = write_file(BIN_OVERLAY_SH,overlay_sh_file,sizeof(overlay_sh_file));
+#endif
+	rc = write_file(BIN_OVERLAY_SH,overlay_sh_file,sizeof(overlay_sh_file),0755);
 	if (rc) goto exit;
-	rc = write_file(BIN_KERNELLOG_SH,kernellog_sh_file,sizeof(kernellog_sh_file));
+	rc = write_file(BIN_KERNELLOG_SH,kernellog_sh_file,sizeof(kernellog_sh_file),0755);
 	if (rc) goto exit;
-	rc = write_file(BIN_SYSTOOLS_SH,systools_sh_file,sizeof(systools_sh_file));
+	rc = write_file(BIN_SYSTOOLS_SH,systools_sh_file,sizeof(systools_sh_file),0755);
 #ifdef USE_PACKED_HOSTS
 	if (rc) goto exit;
-	rc = write_file(PATH_HOSTS_K_ZIP,hosts_k_zip_file,sizeof(hosts_k_zip_file));
+	rc = write_file(PATH_HOSTS_K_ZIP,hosts_k_zip_file,sizeof(hosts_k_zip_file),0644);
 #endif
 exit:
 	return rc;
 }
 
+// be aware that writing to sdcardfs needs a file creation from userspace app,.
+// ...otherwise encrpytion key for file cannot be added. Make sure to touch files from app!
 #define CP_BLOCK_SIZE 10000
 #define MAX_COPY_SIZE 2000000
 static int copy_files(char *src_file, char *dst_file, int max_len,  bool only_trunc){
@@ -280,18 +323,27 @@ static char** alloc_memory(int size)
 
 static int use_userspace(char** argv)
 {
-	static char* envp[] = {
+        static char *envp[] = {
 		"SHELL=/bin/sh",
-		"HOME=/",
+                "HOME=/",
 		"USER=shell",
-		"TERM=xterm-256color",
-		"PATH=/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:/system_ext/bin:/system/bin:/system/xbin:/odm/bin:/vendor/bin:/vendor/xbin",
+                "TERM=linux",
+		"PATH=/bin:/sbin:/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:/system_ext/bin:/system/bin:/system/xbin:/odm/bin:/vendor/bin:/vendor/xbin",
 		"DISPLAY=:0",
-		NULL
-	};
-
-	return call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
+                NULL
+        };
+        struct subprocess_info *info;
+        info = call_usermodehelper_setup(argv[0], argv, envp, GFP_KERNEL,
+                                         NULL, NULL, NULL);
+        if (!info) {
+		pr_err("%s cannot call usermodehelper setup - info NULL\n",__func__);
+		return -EINVAL;
+	}
+	// in case of CONFIG_STATIC_USERMODEHELPER=y, we must override the empty path that usually is set, and calls won't do anything
+	info->path = argv[0];
+        return call_usermodehelper_exec(info, UMH_WAIT_EXEC | UMH_KILLABLE);
 }
+
 static int call_userspace(char *binary, char *param0, char *param1, char *message_text) {
 	char** argv;
 	int ret;
@@ -305,7 +357,10 @@ static int call_userspace(char *binary, char *param0, char *param1, char *messag
 	strcpy(argv[2], param1);
 	argv[3] = NULL;
 	ret = use_userspace(argv);
+	if (!ret) msleep(5);
+
 	free_memory(argv, INITIAL_SIZE);
+
 	if (!ret) {
 		pr_info("%s call succeeded '%s' . rc = %u\n",__func__,message_text,ret);
 	} else {
@@ -356,7 +411,7 @@ static void set_selinux_enforcing(bool enforcing, bool full_permissive) {
 			// to only let through Userspace permissions, not kernel side ones.
 			pr_info("%s [userland] kernel permissive : setting full permissive kernel suppressed: %u\n",!enforcing);
 			set_full_permissive_kernel_suppressed(!enforcing);
-			// supress kernel side permissive, but still set mount access for the exceptional uci paths:
+			// enable fs accesses in /fs driver parts (full permissive suppression would block these as file access is in-kernel blocked)
 			set_kernel_pemissive_user_mount_access(!enforcing);
 		}
 #endif
@@ -391,7 +446,7 @@ static void overlay_system_etc(void) {
 
         do {
 		ret = call_userspace("/system/bin/cp",
-			"/system/etc/hosts", "/data/local/tmp/sys_hosts", "cp sys_hosts");
+			"/system/etc/hosts", PATH_SYSHOSTS, "cp sys_hosts");
 		if (ret) {
 		    pr_info("%s can't copy system hosts yet. sleep...\n",__func__);
 		    msleep(DELAY);
@@ -415,15 +470,38 @@ static void overlay_system_etc(void) {
 DEFINE_MUTEX(kernellog_mutex);
 
 static void kernellog_call(void) {
-	if (mutex_trylock(&kernellog_mutex)) {
 		int ret;
 		ret = call_userspace(BIN_SH,
 			"-c", BIN_KERNELLOG_SH, "sh kernellog");
 		msleep(3000);
+		ret = copy_files(PATH_UCI_DMESG,"/storage/emulated/0/__uci-cs-dmesg.txt",MAX_COPY_SIZE,false);
+	        if (!ret)
+	                pr_info("%s copy cs dmesg: 0\n",__func__);
+	        else {
+	                pr_err("%s userland: COULDN'T copy dmesg %u\n",__func__,ret);
+		}
+		ret = copy_files(PATH_UCI_RAMOOPS,"/storage/emulated/0/__console-ramoops-0.txt",MAX_COPY_SIZE,false);
+	        if (!ret)
+	                pr_info("%s copy cs ramoops: 0\n",__func__);
+	        else {
+	                pr_err("%s userland: COULDN'T copy ramoops %u\n",__func__,ret);
+		}
+
+		msleep(100);
+}
+
+static void kernellog_call_work_func(struct work_struct * kernellog_call_work)
+{
+	if (mutex_trylock(&kernellog_mutex)) {
+		set_selinux_enforcing(false,false);
 		sync_fs();
+		kernellog_call();
+		sync_fs();
+		set_selinux_enforcing(true,false);
 		mutex_unlock(&kernellog_mutex);
 	}
 }
+static DECLARE_WORK(kernellog_call_work, kernellog_call_work_func);
 
 DEFINE_MUTEX(systools_mutex);
 
@@ -442,7 +520,7 @@ static void systools_call(char *command) {
 		if (current_ssid!=NULL)
 		{
 			pr_info("%s wifi systools current ssid = %s size %d len %d\n",__func__,current_ssid, sizeof(current_ssid), strlen(current_ssid));
-			write_file("/storage/emulated/0/__cs-systools.txt",current_ssid, strlen(current_ssid));
+			write_file("/storage/emulated/0/__cs-systools.txt",current_ssid, strlen(current_ssid),0644);
 		}
 #else
 		int ret;
@@ -493,35 +571,27 @@ static void encrypted_work(void)
 #ifdef USE_PACKED_HOSTS
 	// chmod for resetprop
 	ret = call_userspace(BIN_CHMOD,
-			"644", PATH_HOSTS_K_ZIP, "chmod hosts_k");
+			"644", PATH_HOSTS_K_ZIP, "chmod hosts_k_zip");
 	if (!ret) {
 		data_mount_ready = true;
 	}
 
 // do this from overlay.sh instead, permission issue without SHELL user...
-#if 0
+#ifndef USE_SCRIPTS
 	// rm original hosts_k file to enable unzip to create new file (permission issue)
 	ret = call_userspace("/system/bin/rm",
 			"-f", PATH_HOSTS, "rm hosts");
-	if (!ret) {
-		data_mount_ready = true;
-	}
-
 	// unzip hosts_k file
 	ret = call_userspace("/system/bin/unzip",
-			PATH_HOSTS_K_ZIP, "-d /data/local/tmp/ -o", "unzip hosts");
-	if (!ret) {
-		data_mount_ready = true;
-	}
+			PATH_HOSTS_K_ZIP, UNZIP_PATH, "unzip hosts");
+	// ch context selinux for hosts file
+	ret = call_userspace("/system/bin/chcon",
+			"u:object_r:system_file:s0", PATH_HOSTS, "chcon u:object_r:system_file:s0 hosts");
+	// chmod for hosts file
+	ret = call_userspace("/system/bin/chmod",
+			"644", PATH_HOSTS, "chmod /dev/__hosts_k");
 #endif
 #endif
-
-	// chmod for resetprop
-	ret = call_userspace(BIN_CHMOD,
-			"755", BIN_RESETPROP, "chmod resetprop");
-	if (!ret) {
-		data_mount_ready = true;
-	}
 
 	// chmod for overlay.sh
 	ret = call_userspace(BIN_CHMOD,
@@ -535,8 +605,19 @@ static void encrypted_work(void)
 	ret = call_userspace(BIN_CHMOD,
 			"755", BIN_SYSTOOLS_SH, "chmod systools sh");
 
+#ifdef USE_RESET_PROPS
+	// pixel4 stuff
+
 	// this part needs full permission, resetprop/setprop doesn't work with Kernel permissive for now
 	set_selinux_enforcing(false,true); // full permissive!
+	// set product name to avid HW TEE in safetynet check
+	// chmod for resetprop
+	ret = call_userspace(BIN_CHMOD,
+			"755", BIN_RESETPROP, "chmod resetprop");
+	if (!ret) {
+		data_mount_ready = true;
+	}
+
 	// set product name to avid HW TEE in safetynet check
 	retries = 0;
 	if (data_mount_ready) {
@@ -573,6 +654,7 @@ static void encrypted_work(void)
 	msleep(300);
 	set_selinux_enforcing(true,true); // set enforcing
 	set_selinux_enforcing(false,false); // set back kernel permissive
+#endif
 
 	if (data_mount_ready) {
 		overlay_system_etc();
@@ -592,7 +674,7 @@ static void decrypted_work(void)
 
 		pr_info("Fs decrypted! Sleeping...");
 		msleep(9000);
-		pr_info("Fs decrypted!");
+		pr_info("fs decrypted!");
 	}
 
 	// Wait for RCU grace period to end for the files to sync
@@ -608,7 +690,7 @@ static void setup_kadaway(bool on) {
 	int ret;
 	set_selinux_enforcing(false,false);
 	if (!on) {
-		ret = copy_files(SDCARD_HOSTS,PATH_HOSTS_2,MAX_COPY_SIZE,true);
+		ret = copy_files(SDCARD_HOSTS,PATH_HOSTS,MAX_COPY_SIZE,true);
 #if 0
 		ret = call_userspace("/system/bin/cp",
 			"/dev/null", PATH_HOSTS, "devnull to hosts");
@@ -624,7 +706,7 @@ static void setup_kadaway(bool on) {
 				"644", PATH_HOSTS, "chmod hosts");
 #endif
 	} else{
-		ret = copy_files(SDCARD_HOSTS,PATH_HOSTS_2,MAX_COPY_SIZE,false);
+		ret = copy_files(SDCARD_HOSTS,PATH_HOSTS,MAX_COPY_SIZE,false);
 #if 0
 		ret = call_userspace("/system/bin/cp",
 			SDCARD_HOSTS, PATH_HOSTS,"cp hosts");
@@ -665,11 +747,7 @@ static void uci_sys_listener(void) {
 
 	if (new_kernellog!=kernellog) {
 		if (new_kernellog) {
-			set_selinux_enforcing(false,false);
-			sync_fs();
-			kernellog_call();
-			sync_fs();
-			set_selinux_enforcing(true,false);
+			schedule_work(&kernellog_call_work);
 		}
 		kernellog = new_kernellog;
 	}
@@ -696,10 +774,12 @@ static void userland_worker(struct work_struct *work)
 	}
 	pr_info("%s worker extern_state inited...\n",__func__);
 
+#ifndef USE_DECRYPTED
 	// set permissive while setting up properties and stuff..
 	set_selinux_enforcing(false,false);
 	encrypted_work();
 	set_selinux_enforcing(true,false);
+#endif
 
 #ifdef USE_DECRYPTED
 	decrypted_work();
