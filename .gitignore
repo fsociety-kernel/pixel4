@@ -137,4 +137,3 @@ build.sh
 /out
 /dtbo
 dtb.sh
-!binaries/*
