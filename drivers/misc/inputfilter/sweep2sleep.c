@@ -65,6 +65,8 @@ static int s2s_continuous_vib = 0;
 static int s2s_wait_for_finger_leave = 1;
 static int s2s_reenable_after_screen_off = 1;
 
+static int s2s_kill_app_mode = 0;
+
 static int touch_x = 0, touch_y = 0, firstx = 0;
 static bool touch_x_called = false, touch_y_called = false, touch_down_called = false;
 static bool scr_on_touch = false, barrier[2] = {false, false};
@@ -301,13 +303,25 @@ static void sweep2sleep_longtap_count(struct work_struct * sweep2sleep_longtap_c
 				sweep2sleep_reset(false); // make sure gesture tracking for sweep stops... BUT don't stop freeze cords! LONG tap means finger still down
 				vib_power = 100;
 				schedule_work(&sweep2sleep_vib_work);
-				write_uci_out("fp_touch");
-			} else { // dt notif down mode -> long tap => power off
-				// wait a bit before actually emulate pwr button press in the trigger, to avoid wake screen on lockscreen touch
-				if (uci_get_sys_property_int_mm("locked", 0, 0, 1)) { // if locked...
-					pause_before_pwr_off = true;
+				if (s2s_kill_app_mode==2) {
+					write_uci_out("fp_kill_app");
+				} else {
+					write_uci_out("fp_touch");
 				}
-				sweep2sleep_pwrtrigger();
+			} else { // dt notif down mode -> long tap => power off
+				if (s2s_kill_app_mode==1) {
+					touch_down_called = false;
+					sweep2sleep_reset(false); // make sure gesture tracking for sweep stops... BUT don't stop freeze cords! LONG tap means finger still down
+					vib_power = 100;
+					schedule_work(&sweep2sleep_vib_work);
+					write_uci_out("fp_kill_app");
+				} else {
+					// wait a bit before actually emulate pwr button press in the trigger, to avoid wake screen on lockscreen touch
+					if (uci_get_sys_property_int_mm("locked", 0, 0, 1)) { // if locked...
+						pause_before_pwr_off = true;
+					}
+					sweep2sleep_pwrtrigger();
+				}
 			}
 			goto exit_mutex;
 		}
@@ -387,10 +401,16 @@ static void detect_sweep2sleep(int x, int y, bool st)
 				    ( (y > s2s_y_limit && y < s2s_y_above) || (filter_coords_status && get_s2s_filter_mode()) ) ) {
 					if (x > (nextx + x_threshold_1)) {
 						if (exec_count) {
-							if (uci_get_sys_property_int_mm("locked", 0, 0, 1)) { // if locked...
-								pause_before_pwr_off = true;
+							if (s2s_kill_app_mode==3) {
+								vib_power = 60;
+								schedule_work(&sweep2sleep_vib_work);
+								write_uci_out("fp_kill_app");
+							} else {
+								if (uci_get_sys_property_int_mm("locked", 0, 0, 1)) { // if locked...
+									pause_before_pwr_off = true;
+								}
+								sweep2sleep_pwrtrigger();
 							}
-							sweep2sleep_pwrtrigger();
 							exec_count = false;
 						}
 					}
@@ -434,10 +454,16 @@ static void detect_sweep2sleep(int x, int y, bool st)
 				    ( (y > s2s_y_limit && y < s2s_y_above) || (filter_coords_status && get_s2s_filter_mode()) ) ) {
 					if (x < (nextx - x_threshold_1)) {
 						if (exec_count) {
-							if (uci_get_sys_property_int_mm("locked", 0, 0, 1)) { // if locked...
-								pause_before_pwr_off = true;
+							if (s2s_kill_app_mode==3) {
+								vib_power = 60;
+								schedule_work(&sweep2sleep_vib_work);
+								write_uci_out("fp_kill_app");
+							} else {
+								if (uci_get_sys_property_int_mm("locked", 0, 0, 1)) { // if locked...
+									pause_before_pwr_off = true;
+								}
+								sweep2sleep_pwrtrigger();
 							}
-							sweep2sleep_pwrtrigger();
 							exec_count = false;
 						}
 					}
@@ -720,15 +746,25 @@ static bool __s2s_input_filter(struct input_handle *handle, unsigned int type,
 							sweep2sleep_reset(false); // do not let coordinate freezing yet off, finger is on screen and gesture is still on => (false)
 							filter_coords_status = true; // set filtering on...
 							if (get_s2s_doubletap_mode()==1) { // power button mode
-								// wait a bit before actually emulate pwr button press in the trigger, to avoid wake screen on lockscreen touch
-								if (uci_get_sys_property_int_mm("locked", 0, 0, 1)) { // if locked...
-									pause_before_pwr_off = true;
+								if (s2s_kill_app_mode==1) {
+									vib_power = 60;
+									schedule_work(&sweep2sleep_vib_work);
+									write_uci_out("fp_kill_app");
+								} else {
+									// wait a bit before actually emulate pwr button press in the trigger, to avoid wake screen on lockscreen touch
+									if (uci_get_sys_property_int_mm("locked", 0, 0, 1)) { // if locked...
+										pause_before_pwr_off = true;
+									}
+									sweep2sleep_pwrtrigger();
 								}
-								sweep2sleep_pwrtrigger();
 							} else { // mode 2
 								vib_power = 60;
 								schedule_work(&sweep2sleep_vib_work);
-								write_uci_out("fp_touch");
+								if (s2s_kill_app_mode==2) {
+									write_uci_out("fp_kill_app");
+								} else {
+									write_uci_out("fp_touch");
+								}
 							}
 							reset_doubletap_tracking();
 #ifdef FULL_FILTER
@@ -813,6 +849,7 @@ static void uci_user_listener(void) {
 	s2s_continuous_vib = uci_get_user_property_int_mm("sweep2sleep_continuous_vib", 0, 0, 1);
 	s2s_wait_for_finger_leave = uci_get_user_property_int_mm("sweep2sleep_wait_for_finger_leave", s2s_wait_for_finger_leave, 0, 1);
 	s2s_reenable_after_screen_off = uci_get_user_property_int_mm("sweep2sleep_reenable_after_screen_off", s2s_reenable_after_screen_off, 0, 1);
+	s2s_kill_app_mode = uci_get_user_property_int_mm("sweep2sleep_kill_app_mode",0,0,3);
 }
 
 static void ntf_listener(char* event, int num_param, char* str_param) {
