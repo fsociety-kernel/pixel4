@@ -17,6 +17,9 @@
 #include <linux/delay.h>
 #include <linux/userland.h>
 
+#include <linux/kernel.h>
+#include <linux/sched/signal.h>
+
 //file operation+
 #include <linux/fs.h>
 #include <linux/file.h>
@@ -539,6 +542,112 @@ static void systools_call(char *command) {
 	}
 }
 
+DEFINE_MUTEX(killprocess_mutex);
+
+struct task_kill_info {
+    struct task_struct *task;
+    struct work_struct work;
+};
+
+static void proc_kill_task(struct work_struct *work)
+{
+    struct task_kill_info *kinfo = container_of(work, typeof(*kinfo), work);
+    struct task_struct *task = kinfo->task;
+
+    send_sig(SIGKILL, task, 0);
+    put_task_struct(task);
+    kfree(kinfo);
+}
+
+char buffer[256];
+char * get_task_state(long state)
+{
+    switch (state) {
+        case TASK_RUNNING:
+            return "TASK_RUNNING";
+        case TASK_INTERRUPTIBLE:
+            return "TASK_INTERRUPTIBLE";
+        case TASK_UNINTERRUPTIBLE:
+            return "TASK_UNINTERRUPTIBLE";
+        case __TASK_STOPPED:
+            return "__TASK_STOPPED";
+        case __TASK_TRACED:
+            return "__TASK_TRACED";
+        default:
+        {
+            sprintf(buffer, "Unknown Type:%ld\n", state);
+            return buffer;
+        }
+    }
+}
+
+static int find_and_kill_task(char *filter)
+{
+    struct task_struct *task_list;
+    struct task_struct *task_to_kill;
+    unsigned int process_count = 0;
+    int found_count = 0;
+
+    pr_info("%s: In init\n", __func__);
+
+    for_each_process(task_list) {
+        //pr_info("Process: %s\t PID:[%d]\t (%s) - looking for: %s\n",
+        //        task_list->comm, task_list->pid,
+        //        get_task_state(task_list->state), filter);
+
+	if (strlen(filter)>0 && strstr(filter,task_list->comm)) { // filter is longer, comm is substring possibly
+		struct mm_struct *mm = NULL;
+		char *pathname,*p;
+		mm = task_list->mm;
+		if (mm) {
+		    down_read(&mm->mmap_sem);
+		    if (mm->exe_file) {
+	                    pathname = kmalloc(PATH_MAX, GFP_ATOMIC);
+	                    if (pathname) {
+		                p = d_path(&mm->exe_file->f_path, pathname, PATH_MAX);
+				if (strlen(p)>0 && strstr(p,"/system/bin/app_process")) { // android executable only
+		                    /*Now you have the path name of exe in p*/
+				    found_count++;
+				    if (found_count == 1) {
+					task_to_kill = task_list;
+				    }
+				    pr_info("%s FOUND! Process: %s\t PID:[%d]\t State:%s Path: %s\n",__func__,
+			                task_list->comm, task_list->pid,
+			                get_task_state(task_list->state), p);
+				}
+	                    }
+	            }
+		    up_read(&mm->mmap_sem);
+		}
+	}
+        process_count++;
+    }
+    //pr_info("Number of processes:%u\n", process_count);
+
+    if (found_count==1) // only kill process if found exactly 1 of it. overlapping package names should find >1, block it
+    {
+	    struct task_kill_info *kinfo;
+
+	    kinfo = kmalloc(sizeof(*kinfo), GFP_KERNEL);
+	    if (kinfo) {
+		pr_info("%s FOUND, trying to kill task.\n",__func__);
+		get_task_struct(task_to_kill);
+		kinfo->task = task_to_kill;
+		INIT_WORK(&kinfo->work, proc_kill_task);
+		schedule_work(&kinfo->work);
+	    }
+    }
+
+    return 0;
+}
+
+static void killprocess_call(char *command) {
+	if (mutex_trylock(&killprocess_mutex)) {
+		pr_info("%s trying to kill process named: %s\n",__func__,command);
+		find_and_kill_task(command);
+		mutex_unlock(&killprocess_mutex);
+	}
+}
 
 extern char* init_get_saved_command_line(void);
 
@@ -727,6 +836,7 @@ static void setup_kadaway(bool on) {
 }
 #endif
 
+static bool use_kill_app = false;
 static bool kadaway = true;
 static void uci_user_listener(void) {
 	bool new_kadaway = !!uci_get_user_property_int_mm("kadaway", kadaway, 0, 1);
@@ -737,13 +847,41 @@ static void uci_user_listener(void) {
 		setup_kadaway(kadaway);
 #endif
 	}
+	use_kill_app = uci_get_user_property_int_mm("sweep2sleep_kill_app_mode",0,0,3)>0;
 }
 
 static bool kernellog = false;
 static bool wifi = false;
+static char* fg_process0 = NULL;
+static char* fg_process1 = NULL;
 static void uci_sys_listener(void) {
 	bool new_kernellog = !!uci_get_sys_property_int_mm("kernel_log", kernellog, 0, 1);
 	bool new_wifi = !!uci_get_sys_property_int_mm("wifi_connected", wifi, 0, 1);
+
+	if (use_kill_app) {
+	const char* new_fg_process0 = uci_get_sys_property_str("fg_process0","");
+	const char* new_fg_process1 = uci_get_sys_property_str("fg_process1","");
+	bool first_run = false;
+	if (!fg_process0) {
+		fg_process0 = kmalloc(255 * sizeof(char*), GFP_KERNEL);
+		fg_process1 = kmalloc(255 * sizeof(char*), GFP_KERNEL);
+		first_run = true;
+	}
+	if ( (first_run && new_fg_process0 && new_fg_process1) || (new_fg_process0 && strcmp(fg_process0,new_fg_process0)!=0) ) {
+		pr_info("%s fg process kill change %s %s \n",__func__,new_fg_process0, new_fg_process1);
+		strcpy(fg_process0,new_fg_process0);
+		strcpy(fg_process1,new_fg_process1);
+		if (strstr( fg_process0, "launcher") || strstr( fg_process0, "cleanslate.csservice") || strstr( fg_process0, "#####")) {
+			pr_info("%s not killing launcher process!\n",__func__);
+		} else {
+			set_selinux_enforcing(false,false); // needs full permissive for dumpsys
+			sync_fs();
+			killprocess_call(fg_process0);
+			sync_fs();
+			set_selinux_enforcing(true,false);
+		}
+	}
+	}
 
 	if (new_kernellog!=kernellog) {
 		if (new_kernellog) {
