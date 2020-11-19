@@ -1,4 +1,9 @@
-fsociety #2.13-q
-09/03/2020
-- Linux 4.14.196
-- Allow SOLI for unsupported regions via userland_worker
+fsociety #3.10
+11/19/2020
+- Linux 4.14.207
+- FKM auto-flasher integration
+- Tune SLMK values -  stop killing apps
+- s2s: s2s override gestures with fp_kill_app option added - CleanSlate s2s kill apps
+- uci: userland: add fg process sigkill possibility - CleanSlate s2s kill apps
+- Update WireGuard to latest
+- Update SLMK to latest
