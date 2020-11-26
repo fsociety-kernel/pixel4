@@ -1,3 +1,13 @@
-fsociety #3.12
-11/24/2020
-- Linux 4.14.209
+fsociety #3.13
+11/26/2020
+- f2fs: Demote GC thread to idle scheduler class - goodbye jitter
+- arm64: dts: Transfer display data in burst mode - saves power
+- msm: kgsl: Relax CPU latency requirements to save power
+- Disable touchscreen heatmap - reduce latency
+- Disable power debug logging
+- input: touchscreen cleanup
+- Various arm64 fixes & optimizations
+
+
+
+
