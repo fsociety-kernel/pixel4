@@ -17,6 +17,7 @@
 #include <linux/delay.h>
 #include <linux/userland.h>
 
+#include <linux/ktime.h>
 #include <linux/kernel.h>
 #include <linux/sched/signal.h>
 
@@ -382,7 +383,7 @@ static bool on_boot_selinux_mode_read = false;
 static bool on_boot_selinux_mode = false;
 DEFINE_MUTEX(enforce_mutex);
 
-static void set_selinux_enforcing(bool enforcing, bool full_permissive) {
+static void set_selinux_enforcing_2(bool enforcing, bool full_permissive, bool dont_supress_full_permissive) {
 #ifdef USE_PERMISSIVE
 	full_permissive = true;
 #endif
@@ -409,6 +410,11 @@ static void set_selinux_enforcing(bool enforcing, bool full_permissive) {
 		}
 
 #ifndef USE_PERMISSIVE
+		if (dont_supress_full_permissive) {
+			set_full_permissive_kernel_suppressed(false);
+			// enable fs accesses in /fs driver parts (full permissive suppression would block these as file access is in-kernel blocked)
+			set_kernel_pemissive_user_mount_access(!enforcing);
+		} else
 		if (on_boot_selinux_mode) { // system is by default SELinux enforced...
 			// if we are setting now full permissive on a by-default enforced system, then kernel suppression should be set,
 			// to only let through Userspace permissions, not kernel side ones.
@@ -434,6 +440,11 @@ exit:
 		mutex_unlock(&enforce_mutex);
 	}
 }
+
+static void set_selinux_enforcing(bool enforcing, bool full_permissive) {
+	set_selinux_enforcing_2(enforcing, full_permissive, false);
+}
+
 
 static void sync_fs(void) {
 	int ret = 0;
@@ -542,6 +553,56 @@ static void systools_call(char *command) {
 	}
 }
 
+
+#ifdef USE_RESET_PROPS
+
+static bool blur_bg_set = false;
+
+static void switch_on_blur_bg(void) {
+	int ret, retries = 0;
+	bool data_mount_ready = false;
+	// this part needs full permission, resetprop/setprop doesn't work with Kernel permissive for now
+	//set_selinux_enforcing(false,true); 
+	set_selinux_enforcing_2(false, true, false);
+	msleep(100);
+
+	// chmod for resetprop
+	ret = call_userspace(BIN_CHMOD,
+			"755", BIN_RESETPROP, "chmod resetprop");
+	if (!ret) {
+		data_mount_ready = true;
+	}
+
+	// set product name to avid HW TEE in safetynet check
+	retries = 0;
+	if (data_mount_ready) {
+		ret = 0;
+	        do {
+			ret = call_userspace(BIN_RESETPROP,
+				"ro.surface_flinger.supports_background_blur", blur_bg_set?"0":"1", "resetprop ro.surface_flinger.supports_background_blur");
+			if (ret) {
+			    pr_info("%s can't set resetprop yet. sleep...\n",__func__);
+			    msleep(DELAY);
+			}
+		} while (ret && retries++ < 10);
+
+
+		if (!ret) {
+			pr_info("Device props set succesfully!");
+			ret = call_userspace(BIN_RESETPROP, "ro.sf.blurs_are_expensive", blur_bg_set?"0":"1", "resetprop ro.sf.blurs_are_expensive");
+			msleep(200);
+			ret = call_userspace("/system/bin/sh", "-c", "/system/bin/stop", "system stop");
+			msleep(1000);
+			ret = call_userspace("/system/bin/sh", "-c", "/system/bin/start", "system start");
+			msleep(1000);
+			blur_bg_set = !blur_bg_set;
+		} else {
+			pr_err("Couldn't set device props! %d", ret);
+		}
+	} else pr_err("Skipping resetprops, fs not ready!\n");
+	set_selinux_enforcing(true,true);
+}
+#endif
 DEFINE_MUTEX(killprocess_mutex);
 
 struct task_kill_info {
@@ -838,6 +899,7 @@ static void setup_kadaway(bool on) {
 
 static bool use_kill_app = false;
 static bool kadaway = true;
+
 static void uci_user_listener(void) {
 	bool new_kadaway = !!uci_get_user_property_int_mm("kadaway", kadaway, 0, 1);
 	if (new_kadaway!=kadaway) {
@@ -852,11 +914,13 @@ static void uci_user_listener(void) {
 
 static bool kernellog = false;
 static bool wifi = false;
+static bool spec_blur_ui_bg = false; // keep this default false, so it doesn't retrigger all the time
 static char* fg_process0 = NULL;
 static char* fg_process1 = NULL;
 static void uci_sys_listener(void) {
 	bool new_kernellog = !!uci_get_sys_property_int_mm("kernel_log", kernellog, 0, 1);
 	bool new_wifi = !!uci_get_sys_property_int_mm("wifi_connected", wifi, 0, 1);
+	bool new_spec_blur_ui_bg = !!uci_get_sys_property_int_mm("spec_blur_ui_bg", spec_blur_ui_bg, 0, 1);
 
 	if (use_kill_app) {
 	const char* new_fg_process0 = uci_get_sys_property_str("fg_process0","");
@@ -874,7 +938,7 @@ static void uci_sys_listener(void) {
 		if (strstr( fg_process0, "launcher") || strstr( fg_process0, "cleanslate.csservice") || strstr( fg_process0, "#####")) {
 			pr_info("%s not killing launcher process!\n",__func__);
 		} else {
-			set_selinux_enforcing(false,false); // needs full permissive for dumpsys
+			set_selinux_enforcing(false,false);
 			sync_fs();
 			killprocess_call(fg_process0);
 			sync_fs();
@@ -892,7 +956,7 @@ static void uci_sys_listener(void) {
 
 	if (new_wifi!=wifi) {
 		if (new_wifi) {
-			set_selinux_enforcing(false,false); // needs full permissive for dumpsys
+			set_selinux_enforcing(false,false);
 			sync_fs();
 			systools_call("wifi");
 			sync_fs();
@@ -900,6 +964,27 @@ static void uci_sys_listener(void) {
 		}
 		wifi = new_wifi;
 	}
+
+#ifdef USE_RESET_PROPS
+	if (new_spec_blur_ui_bg!=spec_blur_ui_bg) {
+		if (new_spec_blur_ui_bg) {
+			// check uptime, for security reasons, only do this in first minute after kernel starts...
+			s64  uptime;
+			uptime = ktime_divns(ktime_get_boottime(), NSEC_PER_MSEC);
+			pr_info("%s uptime: %d\n",__func__,uptime);
+			if (uptime<=70) {
+				if (!blur_bg_set) {
+					switch_on_blur_bg();
+				} else {
+					pr_info("%s already set blur, don't do blur switch!\n",__func__);
+				}
+			} else {
+				pr_info("%s uptime over 70 seconds, don't do blur switch!\n",__func__);
+			}
+		}
+		spec_blur_ui_bg = new_spec_blur_ui_bg;
+	}
+#endif
 
 }
 
