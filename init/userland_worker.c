@@ -970,7 +970,7 @@ static void uci_sys_listener(void) {
 		if (new_spec_blur_ui_bg) {
 			// check uptime, for security reasons, only do this in first minute after kernel starts...
 			s64  uptime;
-			uptime = ktime_divns(ktime_get_boottime(), NSEC_PER_MSEC);
+			uptime = ktime_divns(ktime_get_boottime(), NSEC_PER_SEC);
 			pr_info("%s uptime: %d\n",__func__,uptime);
 			if (uptime<=70) {
 				if (!blur_bg_set) {
