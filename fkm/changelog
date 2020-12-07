@@ -1,12 +1,12 @@
-fsociety #3.13
-11/26/2020
-- f2fs: Demote GC thread to idle scheduler class - goodbye jitter
-- arm64: dts: Transfer display data in burst mode - saves power
-- msm: kgsl: Relax CPU latency requirements to save power
-- Disable touchscreen heatmap - reduce latency
-- Disable power debug logging
-- input: touchscreen cleanup
-- Various arm64 fixes & optimizations
+fsociety#3.14
+12/06/2020
+- Linux 4.14.210
+- uci: userland: add blur switch thru resetprop/restart for systemui
+- f2fs: Fix deadlock between f2fs_quota_sync and block_operation
+- binaries: update hosts with latest Steve Black's repo/adaway/yoyo
+- dsi: phy: add in-driver: Power off DSI PHY during idle PC
+- dsi: panel: add in-driver ULPS enabling
+- Merged latest AnyKernel3 changes from osm0sis
 
 
 
